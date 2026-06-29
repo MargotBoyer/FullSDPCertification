@@ -131,6 +131,9 @@ class SDPSolverConfig(BaseModel):
                 raise ValueError(f"cut {cut} not valid.")
         return v
 
+    relu_relaxation_type: str = 'all'
+    bound_strategy: Optional[dict] = None # Stratégie de bornes directement dans le YAML
+
     all_combinations_cuts: Optional[bool] = False
     RLT_props: Optional[List[float]] = [0.0]
 
@@ -166,6 +169,8 @@ class SDPSolverConfig(BaseModel):
     LAST_LAYER: bool = (
         False  # Whether to use the last layer of the network (logits) as variables
     )
+    l_max: Optional[int] = None
+    chordal_stride: int = 1
     use_fusion: bool = False  # Whether to use the fusion API for MOSEK (deprecated: use solver="mosek_fusion")
     solver: str = "mosek_classic"  # Backend solver : "mosek_classic" | "mosek_fusion" | "cvxpy"
     @validator("solver")
@@ -249,7 +254,7 @@ class FullCertificationConfig(BaseModel):
         for model in v:
             if not(model.bounds_method in ["IBP", "alpha-CROWN", "GREAT_BOUNDS", "from_file"]):
                 raise ValueError("Bounds method must be one of 'IBP', 'alpha-CROWN', 'GREAT_BOUNDS', or 'from_file'.")
-            if model.bounds_n_runs < 1:
+            if hasattr(model, 'bounds_n_runs') and model.bounds_n_runs < 1:
                 raise ValueError("bounds_n_runs must be >= 1.")
             elif model.bounds_method == "from_file" and model.bounds_file is None:
                 raise ValueError("Bounds file must be specified if bounds method is 'from_file'.")

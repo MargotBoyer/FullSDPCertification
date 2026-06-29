@@ -35,6 +35,20 @@ logger = logging.getLogger(__name__)
 
 device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def format_strategy_from_dict(strategy_dict: dict):
+    """
+    Convertit un dictionnaire de stratégie du format YAML au format attendu par le solveur
+    (le dictionnaire de clés doit utiliser des tuples).
+    """
+    if not strategy_dict:
+        return {}
+        
+    bound_strategy = {
+        tuple(product_data['key']): product_data['type']
+        for product_data in strategy_dict.values()
+    }
+    return bound_strategy
+
 
 class Certification_Problem:
     def __init__(
@@ -233,6 +247,14 @@ class Certification_Problem:
             dict_infos = dict(solver_config)
             dict_infos.pop("certification_model_type")
             logger.debug("dict_infos:", dict_infos)
+   
+            # --- Traitement de la stratégie de bornes personnalisée ---
+            if solver_config.relu_relaxation_type == 'custom':
+                if not solver_config.bound_strategy:
+                    raise ValueError("relu_relaxation_type='custom' mais aucun dictionnaire 'bound_strategy' n'a été fourni.")
+                
+                # Le dictionnaire est déjà dans solver_config, il faut juste le formater
+                dict_infos['bound_strategy'] = format_strategy_from_dict(solver_config.bound_strategy)
    
             # model_bounds = solve.LPBoundLayer(
             #     network=self.network,

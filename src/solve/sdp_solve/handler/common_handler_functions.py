@@ -475,7 +475,7 @@ def compute_solutions(self, cuts: List, print_sol: bool = False):
         #     )
         print(f"CALLBACK : Solution for {name_solution} of dimension {dim} computed.")
         #self.save_matrix_png(sol, name_solution=name_solution, cuts=cuts)
-        self.save_matrix_csv(sol, name_solution=name_solution, cuts=cuts)
+        #self.save_matrix_csv(sol, name_solution=name_solution, cuts=cuts)
         print(f"CALLBACK : Solution for {name_solution} of dimension {dim} saved as PNG and CSV.")
 
         if print_sol:

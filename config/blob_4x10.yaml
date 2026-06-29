@@ -23,8 +23,30 @@ network :
   - 3
 
 models :
-  - certification_model_type : "UntargetedSDP"
-    write_model: true
+  - certification_model_name : "MdSDP"
+    relu_relaxation_type: 'custom'
+    bound_strategy:
+      product_0:
+        key: [1, 0, 0, 0]
+        type: one_variable  
+      product_1:
+        key: [1, 0, 0, 1]
+        type: one_variable
+      product_2:
+        key: [1, 1, 0, 0]
+        type: one_variable
+      product_3:
+        key: [1, 1, 0, 1]
+        type: one_variable
+      product_4:
+        key: [1, 2, 0, 0]
+        type: one_variable
+      product_5:
+        key: [1, 2, 0, 1]
+        type: composed  
+      
+
+    write_model: false 
     solveur: "mosek_fusion"
     cp_solver : "SCS"
     cuts : 
@@ -32,10 +54,10 @@ models :
     - "triangularization"
     - "McCormick_beta_z"
     - "beta_logits_comparaison"
-    # - "beta_logits_comparaison_big_M"
-    # - "sum_beta_logits_equal_logit"
+    - "beta_logits_comparaison_big_M"
+    - "sum_beta_logits_equal_logit"
     RLT_props : 
-    - 1.
+    - 1.0
     all_combinations_cuts : false
     MATRIX_BY_LAYERS: true
     # - [0,1]

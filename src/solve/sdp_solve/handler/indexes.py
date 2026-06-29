@@ -3,11 +3,25 @@ from typing import List, Union
 from .variable_elements import big_M_cst
 
 
+def build_layer_groups_with_stride(K: int, s: int = 1, LAST_LAYER: bool = False, INPUT_IN_VARIABLES: bool = True) -> List[List[int]]:
+    """Construit des cliques de taille s+1 avec overlap d'une couche."""
+    start = 0 if INPUT_IN_VARIABLES else 1
+    last = K if LAST_LAYER else K - 1
+    groups = []
+    k = start
+    while k < last:
+        group = list(range(k, min(k + s + 1, last + 1)))
+        groups.append(group)
+        k += s  # overlap d'une couche entre groupes
+    return groups
+
+
 def resolve_layer_groups(
     MATRIX_BY_LAYERS: Union[bool, List[List[int]]],
     K: int,
     LAST_LAYER: bool = False,
     INPUT_IN_VARIABLES: bool = True,
+    chordal_stride: int = 1,
 ) -> List[List[int]]:
     """
     Résout MATRIX_BY_LAYERS en liste canonique de groupes de couches.
@@ -31,7 +45,7 @@ def resolve_layer_groups(
 
     if isinstance(MATRIX_BY_LAYERS, bool):
         if MATRIX_BY_LAYERS:
-            return [[k, k + 1] for k in range(start, last)]
+            return build_layer_groups_with_stride(K, chordal_stride, LAST_LAYER, INPUT_IN_VARIABLES)
         else:
             return [list(range(start, last + 1))]
     else:
@@ -71,6 +85,7 @@ class Indexes_Mosek_Solver:
         BETAS_Z: bool = False,
         ZBAR: bool = False,
         INPUT_IN_VARIABLES: bool = True,
+        chordal_stride: int = 1,
         **kwargs,
     ):
         """
@@ -115,7 +130,7 @@ class Indexes_Mosek_Solver:
         self.stable_actives_neurons = kwargs.get("stable_actives_neurons")
         self.keep_penultimate_actives = kwargs.get("keep_penultimate_actives", False)
 
-        self.layer_groups = resolve_layer_groups(MATRIX_BY_LAYERS, K, LAST_LAYER, INPUT_IN_VARIABLES)
+        self.layer_groups = resolve_layer_groups(MATRIX_BY_LAYERS, K, LAST_LAYER, INPUT_IN_VARIABLES, chordal_stride)
         self._layer_to_groups = self._build_layer_to_groups()
         self._pruned_adv_before = self._build_pruned_adv_before()
 

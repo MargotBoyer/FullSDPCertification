@@ -7,7 +7,11 @@ logger_mosek = logging.getLogger("Mosek_logger")
 
 
 def ReLU_constraint_stable_active_relaxation(
-    self, k, j, bound_sense: str = "upper", mccormick_type: str = "composed", name = ""
+    self, k, j,
+    bound_sense: str = "upper",
+    bound_type: str = "composed",
+    name: str = "",
+    bound_strategy: dict = None
 ):
     assert mccormick_type in ["one_variable", "composed", "random"]
     assert bound_sense in ["lower", "upper"]
@@ -16,8 +20,8 @@ def ReLU_constraint_stable_active_relaxation(
     ), f"Neuron ({k}, {j}) has no previous stable active neuron."
 
 
-    if self.handler.Constraints.new_constraint(
-        f"ReLU Relaxed - Layer {k} - z_{k,j} * (z{k,j} - W_{k,j}' z_{k-1}' - b_{k,j}) - M_{k,j} * z_{k,j}'' <= 0 - {mccormick_type} - {bound_sense} - {name}", label = "same_for_data"
+    if self.handler.Constraints.new_constraint( # type: ignore
+        f"ReLU Relaxed - Layer {k} - z_{k,j} * (z{k,j} - W_{k,j}' z_{k-1}' - b_{k,j}) - M_{k,j} * z_{k,j}'' <= 0 - {bound_type} - {bound_sense} - {name}", label = "same_for_data"
     ):
         return
 
@@ -57,8 +61,10 @@ def ReLU_constraint_stable_active_relaxation(
                 front_of_matrix_next=False,
                 weight=self.network.W[k - 1][j][i],
                 bound_sense=bound_sense,
-                mccormick_type=mccormick_type,
-            )            
+                bound_type=bound_type, # Gardé pour la compatibilité
+                bound_strategy=bound_strategy # Nouvel argument
+            )
+            
 
         else:
             # print(f"Adding non-stable neuron ({k-1}, {i}) with weight {self.network.W[k - 1][j][i]}")
@@ -163,13 +169,43 @@ def ReLU_constraint_Lan(
                 # z_0[pruned] not SDP variables: quadratic terms z_1[j]*z_0[i] unavailable.
                 # Skip this sub-constraint (valid relaxation: feasible set enlarges).
                 continue
-            if self.MATRIX_BY_LAYERS and (
+            if self.MATRIX_BY_LAYERS and (k - 1 <= l_max) and (
                 any((k - 1, i) in self.stable_actives_neurons for i in range(self.n[k - 1]))):
                 # The constraint cannot be added as it links products of variables from different matrices : a relaxation is needed
-                # print("STUDY COEFF Relaxation of ReLU constraint for layer", k, "neuron", j)
-                self.quadratic_constraint_heuristic(k,j,heuristic_choice = 'RANDOM')
+
+                # Le type de relaxation est maintenant contrôlé par un paramètre central.
+                # Par défaut, on utilise 'all' si le paramètre n'est pas défini.
+                relaxation_type = getattr(self, 'relu_relaxation_type', 'all')
                 
+                if relaxation_type == 'custom':
+                    # Utilise la stratégie personnalisée fournie via le fichier YAML
+                    if not hasattr(self, 'bound_strategy') or self.bound_strategy is None:
+                        raise ValueError("relu_relaxation_type='custom' requires a 'bound_strategy' dictionary.")
+                    self.ReLU_constraint_stable_active_relaxation(
+                        k, j, bound_sense="upper", name="strategy_upper", bound_strategy=self.bound_strategy
+                    )
+                    self.ReLU_constraint_stable_active_relaxation(
+                        k, j, bound_sense="lower", name="strategy_lower", bound_strategy=self.bound_strategy
+                    )
+                elif relaxation_type == 'one_variable':
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="upper", bound_type="one_variable")
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="lower", bound_type="one_variable")
+
+                elif relaxation_type == 'composed':
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="upper", bound_type="composed")
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="lower", bound_type="composed")
+
+                elif relaxation_type == 'random':
+                    # Note: self.relu_random_samples doit être défini dans la configuration du solveur
+                    for i in range(getattr(self, 'relu_random_samples', 8)):
+                        self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="upper", bound_type="random", name=f"random_{i}")
+                        self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="lower", bound_type="random", name=f"random_{i}")
                 
+                else:  # 'all' est le comportement par défaut
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="upper", bound_type="one_variable")
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="lower", bound_type="one_variable")
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="upper", bound_type="composed")
+                    self.ReLU_constraint_stable_active_relaxation(k, j, bound_sense="lower", bound_type="composed")
 
             else:
                 # print("Adding normal ReLU constraint for layer", k, "neuron", j)
