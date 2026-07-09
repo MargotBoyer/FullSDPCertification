@@ -76,17 +76,6 @@ class QuadConstraint(Constraint):
         self.print_matrix = []
 
     def add_matrix_values(self, var1: str, value: float, **kwargs):
-        """
-        Add a value to an index of the matrix to the current constraint
-        Parameters
-        ----------
-        var1: str
-            The first variable.
-        var2: str (optional)
-            The second variable.
-        **kwargs: List
-            The keyword arguments for the variables.
-        """
 
         j = self._get_variable_index(var1, is_first=True, matrix=True, **kwargs)
 

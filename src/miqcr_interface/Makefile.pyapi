@@ -1,0 +1,96 @@
+# Makefile.pyapi — compile libmiqcr_pyapi.so (shared library pour ctypes Python)
+#
+# Usage (depuis src/miqcr_interface/) :
+#   make -f Makefile.pyapi
+#
+# Pré-requis : les .o du Makefile principal MIQCR ont déjà été compilés.
+#   cd ../../Miqcr-1.0_triang_sbb_gurobiter_QCP5/src && make all
+#
+# Adapter les chemins ci-dessous à votre environnement si nécessaire.
+
+MIQCRDIR    = ../../Miqcr-1.0_triang_sbb_gurobiter_QCP5/src
+MOSEKDIR    = /opt/mosek/9.2/tools/platform/linux64x86
+CBDIR       = $(MIQCRDIR)/../ConicBundle
+CPLEXDIR    = /opt/ibm/ILOG/CPLEX_Studio129/cplex
+IPOPTDIR    = /usr/local/include/coin-or
+IPOPTDIRBIS = $(MIQCRDIR)/../Ipopt/src/Interfaces
+IPOPTLIBDIR = /usr/local/lib64
+CSDPDIR     = $(MIQCRDIR)/../Csdp
+LIB64DIR    = /usr/lib64
+GUROBIDIR   = /users/l/lamberta/gurobi911/linux64/include
+GUROBILIBDIR= /users/l/lamberta/gurobi911/linux64/lib
+
+CC     = gcc
+LD     = g++
+CFLAGS = -g -m64 -fPIC -D_GLIBC_DEBUG -DNOSHORTS -DHAVE_CPLEX
+TARGET = libmiqcr_pyapi.so
+
+# .o déjà compilés dans MIQCRDIR (smiqp.o exclu — contient main())
+MIQCR_OBJS = \
+    $(MIQCRDIR)/utilities.o \
+    $(MIQCRDIR)/liste.o \
+    $(MIQCRDIR)/quicksort.o \
+    $(MIQCRDIR)/obbt.o \
+    $(MIQCRDIR)/in_out.o \
+    $(MIQCRDIR)/quad_prog.o \
+    $(MIQCRDIR)/local_sol_cplex.o \
+    $(MIQCRDIR)/local_sol_ipopt.o \
+    $(MIQCRDIR)/local_sol_mosek.o \
+    $(MIQCRDIR)/local_sol_gurobi.o \
+    $(MIQCRDIR)/boxqp_cplex.o \
+    $(MIQCRDIR)/miqcr_cplex.o \
+    $(MIQCRDIR)/miqcr_triangb.o \
+    $(MIQCRDIR)/miqcr_triang.o \
+    $(MIQCRDIR)/miqcr_triang_gurobi.o \
+    $(MIQCRDIR)/miqcr_triangb_gurobi.o \
+    $(MIQCRDIR)/miqcr_gurobi.o \
+    $(MIQCRDIR)/parameters.o \
+    $(MIQCRDIR)/sbb_boxqp_cplex.o \
+    $(MIQCRDIR)/sbb_boxqp_ipopt.o \
+    $(MIQCRDIR)/sbb_miqcr_cplex.o \
+    $(MIQCRDIR)/sbb_miqcr_ipopt.o \
+    $(MIQCRDIR)/sbb_miqcr_triang.o \
+    $(MIQCRDIR)/sbb_miqcr_triang_gurobi.o \
+    $(MIQCRDIR)/sbb_miqcr_triangb.o \
+    $(MIQCRDIR)/sbb_miqcr_triangb_gurobi.o \
+    $(MIQCRDIR)/sbb_miqcr_gurobi.o \
+    $(MIQCRDIR)/solver_sdp.o \
+    $(MIQCRDIR)/solver_sdp_mixed.o \
+    $(MIQCRDIR)/solver_sdp_opf.o \
+    $(MIQCRDIR)/solver_sdp_triang.o \
+    $(MIQCRDIR)/solver_sdp_triangb.o \
+    $(MIQCRDIR)/opf_cplex.o \
+    $(MIQCRDIR)/opf_mosek.o \
+    $(MIQCRDIR)/obbt_mosek.o
+
+INCLUDES = \
+    -I$(MIQCRDIR) \
+    -I$(CBDIR)/include \
+    -I$(CSDPDIR)/include \
+    -I$(CPLEXDIR)/include \
+    -I$(IPOPTDIR) \
+    -I$(IPOPTDIRBIS) \
+    -I$(MOSEKDIR)/h \
+    -I$(GUROBIDIR)
+
+LIBS = \
+    -L$(CPLEXDIR)/lib/x86-64_linux/static_pic -lcplex \
+    -L$(IPOPTLIBDIR) -lipopt -lmetis \
+    -L$(CBDIR)/lib -lcb \
+    -L$(CSDPDIR)/lib -lsdp \
+    -L$(LIB64DIR) -llapack -lblas -lgfortran \
+    -L$(MOSEKDIR)/bin -lmosek64 \
+    -L$(GUROBILIBDIR) -lgurobi91 \
+    -lm -ldl -lpthread -lz -lgomp
+
+all: $(TARGET)
+
+$(TARGET): miqcr_pyapi.o $(MIQCR_OBJS)
+	$(LD) -shared -fPIC -o $@ $^ $(LIBS)
+	@echo ">>> $(TARGET) compilée avec succès."
+
+miqcr_pyapi.o: miqcr_pyapi.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c miqcr_pyapi.c -o miqcr_pyapi.o
+
+clean:
+	rm -f miqcr_pyapi.o $(TARGET)
