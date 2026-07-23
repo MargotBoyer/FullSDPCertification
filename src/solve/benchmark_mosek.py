@@ -82,11 +82,11 @@
 #             print("\n \n \n \n \n \n \n \n ")
 #             # try:
 #             # Récupère la classe par son nom depuis le module
-#             for MATRIX_BY_LAYERS in [True, False]:
+#             for CHORDAL_DECOMPOSITION in [True, False]:
 #                 model_class = getattr(solve, model_name)
 #                 model_instance = model_class.from_yaml(
 #                     yaml_file,
-#                     MATRIX_BY_LAYERS=MATRIX_BY_LAYERS,
+#                     CHORDAL_DECOMPOSITION=CHORDAL_DECOMPOSITION,
 #                     folder_name=os.path.join(folder_name, data_modele),
 #                 )
 #                 model_instance.solve()
@@ -204,7 +204,7 @@
 
 #         for index, row in df_data_modele_certification_problem.iterrows():
 #             cuts_str = df_data_modele_certification_problem.at[index, "cuts"]
-#             div = "Y" if row["MATRIX_BY_LAYERS"] else "$\\emptyset$"
+#             div = "Y" if row["CHORDAL_DECOMPOSITION"] else "$\\emptyset$"
 #             opt = row["optimal_value"]
 #             f.write(
 #                 f"{cuts_str} & {div} & {round(row['time'])} & {round(row['optimal_value'],3)} \\\\\n"
@@ -287,7 +287,7 @@
 
 #             for index, row in df_data_modele_certification_problem_target.iterrows():
 #                 cuts_str = df_data_modele_certification_problem.at[index, "cuts"]
-#                 div = "Y" if row["MATRIX_BY_LAYERS"] else "$\\emptyset$"
+#                 div = "Y" if row["CHORDAL_DECOMPOSITION"] else "$\\emptyset$"
 
 #                 if certification_problem == "Lan":
 #                     f.write(

@@ -4,6 +4,7 @@ src/bounds.py
 src/bounds_crown.py
 src/bounds_crown_claude.py
 src/certification_problem.py
+src/run_conic_bundle.py
 src/FastSDPCertification.egg-info/PKG-INFO
 src/FastSDPCertification.egg-info/SOURCES.txt
 src/FastSDPCertification.egg-info/dependency_links.txt
@@ -45,6 +46,9 @@ src/fastsdp_tools/benchmark.py
 src/fastsdp_tools/resume_utils.py
 src/fastsdp_tools/utils.py
 src/fastsdp_tools/yaml_config.py
+src/miqcr_interface/__init__.py
+src/miqcr_interface/miqcr_wrapper.py
+src/miqcr_interface/sdp_data.py
 src/networks/__init__.py
 src/networks/adv_train.py
 src/networks/mlp_bb_beta_crown.py
@@ -86,6 +90,7 @@ src/solve/sdp_solve/SDPmodels/certification_problem_constraints_forward_pass.py
 src/solve/sdp_solve/SDPmodels/certification_problem_constraints_rlt.py
 src/solve/sdp_solve/SDPmodels/certification_problem_constraints_sdp.py
 src/solve/sdp_solve/SDPmodels/certification_problem_objective.py
+src/solve/sdp_solve/SDPmodels/certification_problem_relaxed_relu_heuristic.py
 src/solve/sdp_solve/SDPmodels/krelu.py
 src/solve/sdp_solve/handler/__init__.py
 src/solve/sdp_solve/handler/common_handler_functions.py

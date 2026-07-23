@@ -6,5 +6,7 @@ certification_problem
 conic_bundle
 data
 fastsdp_tools
+miqcr_interface
 networks
+run_conic_bundle
 solve

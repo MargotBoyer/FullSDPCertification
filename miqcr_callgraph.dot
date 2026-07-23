@@ -1,0 +1,195 @@
+digraph MIQCR {
+
+    graph [
+        rankdir=TB,
+        fontname="Helvetica",
+        fontsize=13,
+        splines=true,
+        nodesep=0.5,
+        ranksep=0.7,
+        bgcolor="#F8F8F8",
+        label="Graphe des appels — Librairie MIQCR (Miqcr-1.0_triang_sbb_gurobiter_QCP5)\nFiltre : fonctions principales et flux de données",
+        labelloc=t,
+        labeljust=c,
+        fontsize=16
+    ];
+
+    node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=11, margin="0.15,0.10"];
+    edge [fontname="Helvetica", fontsize=9, color="#444444"];
+
+    /* ================================================================ */
+    /* CLUSTER : smiqp.c — point d'entrée                               */
+    /* ================================================================ */
+    subgraph cluster_main {
+        label="smiqp.c";
+        style="filled,rounded";
+        color="#AAAAAA";
+        fillcolor="#EEEEEE";
+        fontsize=12; fontname="Helvetica Bold";
+
+        main [label="main()\n───\n• Lit argv (fichier .dat, .sol)\n• Dispatch selon type de problème\n  (binaire / entier / continu / mixte)\n• Orchestre toutes les phases", fillcolor="#2C6FAC", fontcolor=white, fontsize=11, shape=box, style="filled,rounded"];
+    }
+
+    /* ================================================================ */
+    /* CLUSTER : Initialisation                                          */
+    /* ================================================================ */
+    subgraph cluster_init {
+        label="Initialisation";
+        style="filled,rounded";
+        color="#888888";
+        fillcolor="#E8F4FF";
+        fontsize=12; fontname="Helvetica Bold";
+
+        read_file [label="read_file()\nin_out.c\n───\nLit le fichier .dat :\nn, nb_int, m, p, mq, pq\nQ, c, A, b, D, e, Aq, Dq\nBornes u, l", fillcolor="#5B9BD5", fontcolor=white];
+
+        init_param [label="init_param()\nparameters.c\n───\nLit param.smiqp :\nFACTOR, EPS_TERM_CB,\nTRIANGLE, NB_MAX_ITER,\nTIME_LIMIT_CB, ...", fillcolor="#5B9BD5", fontcolor=white];
+
+        local_sol_gurobi [label="compute_local_sol_init_gurobi()\nlocal_sol_gurobi.c\n───\nBorne supérieure initiale\n(solution admissible via Gurobi)", fillcolor="#70AD47", fontcolor=white];
+
+        local_sol_ipopt [label="compute_local_sol_ipopt_init()\nlocal_sol_ipopt.c\n───\nBorne sup. initiale (fallback)\n(solution locale via Ipopt)", fillcolor="#70AD47", fontcolor=white];
+    }
+
+    /* ================================================================ */
+    /* CLUSTER : Construction du SDP                                    */
+    /* ================================================================ */
+    subgraph cluster_sdp_build {
+        label="Construction du SDP — quad_prog.c";
+        style="filled,rounded";
+        color="#888888";
+        fillcolor="#FFF8E8";
+        fontsize=12; fontname="Helvetica Bold";
+
+        create_sdp_mixed [label="create_sdp_mixed()\nquad_prog.c\n───\nConstruit la structure SDP :\n• McCormick linéarisations\n• Contraintes Ax=b, Dx≤e\n• Tenseurs Aq, Dq\n• psdp->tab[], psdp->constraints[]\n• Applique FACTOR pour filtrer\n  les paires (i,j) McCormick", fillcolor="#ED7D31", fontcolor=white];
+
+        create_sdp_triang [label="create_sdp_triangle()\ncreate_sdp_triangleb()\nquad_prog.c\n───\nIdem + inégalités triangulaires\n(renforcent la relaxation SDP)", fillcolor="#ED7D31", fontcolor=white];
+    }
+
+    /* ================================================================ */
+    /* CLUSTER : Résolution SDP (Conic Bundle)                          */
+    /* ================================================================ */
+    subgraph cluster_sdp_solve {
+        label="Résolution SDP — solver_sdp_mixed.c";
+        style="filled,rounded";
+        color="#AA3333";
+        fillcolor="#FFF0F0";
+        fontsize=12; fontname="Helvetica Bold";
+
+        compute_alpha_beta [label="compute_alpha_beta_sbb_miqcr()\nsolver_sdp_mixed.c\n───\nPoint d'entrée de la phase SDP.\nAprès convergence, assemble :\n  β[i,j] = β₁+β₂−β₃−β₄  (hors-diag)\n  β[i,i] = beta_diag[i]  (diag)\nStocke psdp->beta, alphaq, alphabisq", fillcolor="#C0392B", fontcolor=white, penwidth=2];
+
+        run_cb [label="run_conic_bundle_mixed()\nsolver_sdp_mixed.c\n───\nBoucle Conic Bundle :\n  • Résout le SDP initial\n  • Maximise le dual de Lagrange\n    sur les beta (McCormick)\n  • Critère arrêt : sgnorm ≤ EPS_TERM_CB\n    OU iter ≥ NB_MAX_ITER\n    OU temps ≥ TIME_LIMIT_CB", fillcolor="#E07070", fontcolor=white];
+
+        eval_fun [label="eval_fun_mixed()\nsolver_sdp_mixed.c\n───\nÉvaluée à chaque itération CB :\n  1. update_beta_value(psdp, beta)\n  2. run_sdp_solver_mixed_mosek(&x)\n  3. dualized_objective_function()\n  4. evaluate_objective()\n  5. compute_subgradient()\nRetourne : obj_val, sous-gradient", fillcolor="#E07070", fontcolor=white];
+
+        run_mosek [label="run_sdp_solver_mixed_mosek(double **x)\nsolver_sdp_mixed.c\n───\n⚠️  FONCTION À REMPLACER  ⚠️\n\nRésout le SDP avec Mosek :\n  max  ⟨C_beta, X⟩\n  s.t. ⟨Aq_k, X⟩ = bq_k\n       McCormick (McCormick diag)\n       X₀₀ = 1,  X ≽ 0\n\nSorties :\n  x[0] : triangle sup de X\n           taille (n+1)(n+2)/2\n  psdp->beta_diag[i]\n  psdp->alphaq[k]\n  psdp->alphabisq[k]\n  sol_sdp (global)", fillcolor="#8B0000", fontcolor=white, penwidth=3, style="filled,rounded,bold"];
+
+        run_csdp [label="run_sdp_solver_mixed()\nsolver_sdp_mixed.c\n───\n(Alternatif : solveur CSDP)\nMême interface que Mosek", fillcolor="#CC8888", fontcolor=white, style="dashed,filled,rounded"];
+    }
+
+    /* ================================================================ */
+    /* CLUSTER : Utilitaires SDP — utilities.c                          */
+    /* ================================================================ */
+    subgraph cluster_utils {
+        label="Utilitaires SDP — utilities.c";
+        style="filled,rounded";
+        color="#666688";
+        fillcolor="#F0EEF8";
+        fontsize=12; fontname="Helvetica Bold";
+
+        dualized_obj [label="dualized_objective_function()\nutilities.c\n───\nConstruit C_beta = −Q + dualisation\ndes contraintes McCormick :\n  case 1 → β₁[i,j] : x_ix_j ≤ u_ix_j + l_jx_i − u_il_j\n  case 2 → β₂[i,j] : x_ix_j ≤ u_jx_i + l_ix_j − u_jl_i\n  case 3 → β₃[i,j] : x_ix_j ≥ u_jx_i + u_ix_j − u_iu_j\n  case 4 → β₄[i,j] : x_ix_j ≥ l_jx_i + l_ix_j − l_il_j\nSorties : q_beta, c_beta, l_beta", fillcolor="#9B59B6", fontcolor=white];
+
+        update_beta [label="update_beta_value()\nutilities.c\n───\nMet à jour β₁, β₂, β₃, β₄\ndepuis le vecteur beta[] de la CB", fillcolor="#9B59B6", fontcolor=white];
+
+        compute_subg [label="compute_subgradient()\nutilities.c\n───\nCalcule b − B(X) :\nsous-gradient pour la CB\n(violation des contraintes dualisées)", fillcolor="#9B59B6", fontcolor=white];
+    }
+
+    /* ================================================================ */
+    /* CLUSTER : Reformulation convexe — quad_prog.c                    */
+    /* ================================================================ */
+    subgraph cluster_reform {
+        label="Reformulation convexe — quad_prog.c";
+        style="filled,rounded";
+        color="#888888";
+        fillcolor="#FFFBE8";
+        fontsize=12; fontname="Helvetica Bold";
+
+        create_c_miqcp [label="create_c_miqcp()\ncreate_miqcp_triang()\ncreate_miqcp_triangb()\nquad_prog.c\n───\nConstruit le QCP convexe :\nvariables y_ij = x_i·x_j", fillcolor="#D4A800", fontcolor=white];
+
+        compute_new_q [label="compute_new_q_sbb_miqcr()\ncompute_new_q_sbb_miqcr_triang()\ncompute_new_lambda_min_sbb_miqcr()\nsolver_sdp_mixed.c\n───\nUtilise psdp->beta pour construire\nla nouvelle matrice Q convexe\ndu QCP reformulé", fillcolor="#D4A800", fontcolor=white];
+    }
+
+    /* ================================================================ */
+    /* CLUSTER : Branch & Bound — Gurobi                                */
+    /* ================================================================ */
+    subgraph cluster_bb {
+        label="Branch & Bound — Gurobi";
+        style="filled,rounded";
+        color="#336633";
+        fillcolor="#EEF8EE";
+        fontsize=12; fontname="Helvetica Bold";
+
+        miqcr_triang_g [label="miqcr_triang_gurobi()\nmiqcr_triangb_gurobi()\nmiqcr_gurobi.c\n───\nB&B standard (type 0,1)\nRésout QCP convexe réformulé\nvia Gurobi", fillcolor="#27AE60", fontcolor=white];
+
+        sbb_triang_g [label="sbb_miqcr_gurobi_triang()\nsbb_miqcr_gurobi_triangb()\nsbb_miqcr_gurobi()\nsbb_miqcr_*_gurobi.c\n───\nSpatial B&B (type 2,3, mixed)\nBranch sur x continus\nÀ chaque nœud : résout QCP Gurobi\n+ mise à jour bornes [l,u]", fillcolor="#27AE60", fontcolor=white];
+    }
+
+    /* ================================================================ */
+    /* ARÊTES                                                            */
+    /* ================================================================ */
+
+    /* Initialisation */
+    main -> read_file       [label="1. Lecture\nproblème", color="#2C6FAC", fontcolor="#2C6FAC"];
+    main -> init_param      [label="2. Paramètres", color="#2C6FAC", fontcolor="#2C6FAC"];
+    main -> local_sol_gurobi [label="3. Borne sup\ninitiale", color="#2C6FAC", fontcolor="#2C6FAC"];
+    local_sol_gurobi -> local_sol_ipopt [label="si échec\n(fallback)", style=dashed, color="#888888"];
+
+    /* SDP setup */
+    main -> create_sdp_mixed  [label="4a. Setup SDP\n(cas général)", color="#ED7D31", fontcolor="#ED7D31"];
+    main -> create_sdp_triang [label="4b. Setup SDP\n(TRIANGLE=1)", color="#ED7D31", fontcolor="#ED7D31", style=dashed];
+
+    /* SDP resolution chain */
+    main -> compute_alpha_beta [label="5. Résolution\nSDP", color="#C0392B", fontcolor="#C0392B", penwidth=2];
+    compute_alpha_beta -> run_cb [penwidth=2, color="#C0392B"];
+    run_cb -> run_mosek [label="SDP initial\n+ SDP final", penwidth=2, color="#8B0000"];
+    run_cb -> eval_fun  [label="boucle\n[NB_MAX_ITER]", penwidth=2, color="#8B0000", style=dashed];
+    eval_fun -> update_beta  [color="#9B59B6"];
+    eval_fun -> run_mosek    [label="SDP à\nchaque iter", penwidth=2, color="#8B0000"];
+    eval_fun -> dualized_obj [color="#9B59B6"];
+    eval_fun -> compute_subg [color="#9B59B6"];
+    run_mosek -> dualized_obj [label="lit C_beta", color="#9B59B6", style=dashed];
+
+    /* Reformulation */
+    main -> create_c_miqcp [label="6. Reformulation\nconvexe", color="#D4A800", fontcolor="#D4A800"];
+    main -> compute_new_q  [label="7. Nouveau Q\nconvexe", color="#D4A800", fontcolor="#D4A800"];
+    compute_new_q -> compute_alpha_beta [label="lit psdp->beta", style=dashed, color="#888888", dir=back];
+
+    /* Branch & Bound */
+    main -> miqcr_triang_g [label="8a. B&B\n(type 0,1)", color="#27AE60", fontcolor="#27AE60"];
+    main -> sbb_triang_g   [label="8b. Spatial B&B\n(type 2,3)", color="#27AE60", fontcolor="#27AE60"];
+
+    /* CSDP alternative (dashed) */
+    run_csdp -> dualized_obj [style=dashed, color="#888888"];
+    run_cb -> run_csdp [label="(alternatif)", style=dashed, color="#888888"];
+
+    /* ================================================================ */
+    /* LÉGENDE                                                           */
+    /* ================================================================ */
+    subgraph cluster_legend {
+        label="Légende";
+        style="filled,rounded";
+        color="#AAAAAA";
+        fillcolor="#FFFFFF";
+        fontsize=11;
+
+        leg_entry  [label="Point d'entrée", fillcolor="#2C6FAC", fontcolor=white, width=2];
+        leg_init   [label="Initialisation / I/O", fillcolor="#5B9BD5", fontcolor=white, width=2];
+        leg_sdp    [label="Construction SDP", fillcolor="#ED7D31", fontcolor=white, width=2];
+        leg_cb     [label="Conic Bundle / SDP solve", fillcolor="#C0392B", fontcolor=white, width=2];
+        leg_toreplace [label="⚠️  À REMPLACER  ⚠️", fillcolor="#8B0000", fontcolor=white, width=2, penwidth=3, style="filled,rounded,bold"];
+        leg_utils  [label="Utilitaires SDP", fillcolor="#9B59B6", fontcolor=white, width=2];
+        leg_reform [label="Reformulation convexe", fillcolor="#D4A800", fontcolor=white, width=2];
+        leg_bb     [label="Branch & Bound (Gurobi)", fillcolor="#27AE60", fontcolor=white, width=2];
+        leg_local  [label="Solution locale", fillcolor="#70AD47", fontcolor=white, width=2];
+
+        leg_entry -> leg_init -> leg_sdp -> leg_cb -> leg_toreplace -> leg_utils -> leg_reform -> leg_bb -> leg_local [style=invis];
+    }
+}

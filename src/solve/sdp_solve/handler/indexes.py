@@ -4,13 +4,13 @@ from .variable_elements import big_M_cst
 
 
 def resolve_layer_groups(
-    MATRIX_BY_LAYERS: Union[bool, List[List[int]]],
+    CHORDAL_DECOMPOSITION: Union[bool, List[List[int]]],
     K: int,
     LAST_LAYER: bool = False,
     INPUT_IN_VARIABLES: bool = True,
 ) -> List[List[int]]:
     """
-    Résout MATRIX_BY_LAYERS en liste canonique de groupes de couches.
+    Résout CHORDAL_DECOMPOSITION en liste canonique de groupes de couches.
 
     Exemples (INPUT_IN_VARIABLES=True) :
       True,  K=5 → [[0,1],[1,2],[2,3],[3,4]]
@@ -26,30 +26,30 @@ def resolve_layer_groups(
     print("K : ", K)
     last = K if LAST_LAYER else K - 1
     start = 0 if INPUT_IN_VARIABLES else 1
-    print("MATRIX_BY_LAYERS  in resolve layer groups: ", MATRIX_BY_LAYERS)
+    print("CHORDAL_DECOMPOSITION  in resolve layer groups: ", CHORDAL_DECOMPOSITION)
     print("INPUT_IN_VARIABLES in resolve_layer_groups : ", INPUT_IN_VARIABLES)
 
-    if isinstance(MATRIX_BY_LAYERS, bool):
-        if MATRIX_BY_LAYERS:
+    if isinstance(CHORDAL_DECOMPOSITION, bool):
+        if CHORDAL_DECOMPOSITION:
             return [[k, k + 1] for k in range(start, last)]
         else:
             return [list(range(start, last + 1))]
     else:
-        assert MATRIX_BY_LAYERS[0][0] == start, (
+        assert CHORDAL_DECOMPOSITION[0][0] == start, (
             f"First group must start at layer {start} "
             f"(INPUT_IN_VARIABLES={INPUT_IN_VARIABLES})"
         )
-        print("MATRIX_LAYERS[-1][-1] : ", MATRIX_BY_LAYERS[-1][-1])
+        print("MATRIX_LAYERS[-1][-1] : ", CHORDAL_DECOMPOSITION[-1][-1])
         print("last : ", last)
-        assert MATRIX_BY_LAYERS[-1][-1] == last, (
-            f"Last group must end at layer {last}, got {MATRIX_BY_LAYERS[-1][-1]}"
+        assert CHORDAL_DECOMPOSITION[-1][-1] == last, (
+            f"Last group must end at layer {last}, got {CHORDAL_DECOMPOSITION[-1][-1]}"
         )
-        for i in range(len(MATRIX_BY_LAYERS) - 1):
-            assert MATRIX_BY_LAYERS[i][-1] == MATRIX_BY_LAYERS[i + 1][0], (
-                f"Groups {MATRIX_BY_LAYERS[i]} and {MATRIX_BY_LAYERS[i + 1]} "
+        for i in range(len(CHORDAL_DECOMPOSITION) - 1):
+            assert CHORDAL_DECOMPOSITION[i][-1] == CHORDAL_DECOMPOSITION[i + 1][0], (
+                f"Groups {CHORDAL_DECOMPOSITION[i]} and {CHORDAL_DECOMPOSITION[i + 1]} "
                 f"must share exactly one boundary layer"
             )
-        return MATRIX_BY_LAYERS
+        return CHORDAL_DECOMPOSITION
 
 
 class Indexes_Mosek_Solver:
@@ -65,7 +65,7 @@ class Indexes_Mosek_Solver:
         self,
         K: int,
         n: List[int],
-        MATRIX_BY_LAYERS: Union[bool, List[List[int]]] = False,
+        CHORDAL_DECOMPOSITION: Union[bool, List[List[int]]] = False,
         LAST_LAYER: bool = False,
         BETAS: bool = False,
         BETAS_Z: bool = False,
@@ -80,7 +80,7 @@ class Indexes_Mosek_Solver:
             Nombre de couches du réseau.
         n : List[int]
             Nombre de neurones par couche (longueur K+1).
-        MATRIX_BY_LAYERS : Union[bool, List[List[int]]]
+        CHORDAL_DECOMPOSITION : Union[bool, List[List[int]]]
             True  → décomposition chordale standard (paires consécutives).
             False → matrice unique.
             List  → groupes explicites, ex. [[0,1],[1,2,3,4],[4,5]].
@@ -102,7 +102,7 @@ class Indexes_Mosek_Solver:
         """
         self.n = n
         self.K = K
-        self.MATRIX_BY_LAYERS = MATRIX_BY_LAYERS  # conservé pour référence
+        self.CHORDAL_DECOMPOSITION = CHORDAL_DECOMPOSITION  # conservé pour référence
         self.LAST_LAYER = LAST_LAYER
         self.BETAS = BETAS
         self.BETAS_Z = BETAS_Z
@@ -115,7 +115,7 @@ class Indexes_Mosek_Solver:
         self.stable_actives_neurons = kwargs.get("stable_actives_neurons")
         self.keep_penultimate_actives = kwargs.get("keep_penultimate_actives", False)
 
-        self.layer_groups = resolve_layer_groups(MATRIX_BY_LAYERS, K, LAST_LAYER, INPUT_IN_VARIABLES)
+        self.layer_groups = resolve_layer_groups(CHORDAL_DECOMPOSITION, K, LAST_LAYER, INPUT_IN_VARIABLES)
         self._layer_to_groups = self._build_layer_to_groups()
         self._pruned_adv_before = self._build_pruned_adv_before()
 

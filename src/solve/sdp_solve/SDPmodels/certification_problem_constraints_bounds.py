@@ -446,7 +446,7 @@ def all_Mc_Cormick_all_layers(self):
             if k == 0:
                 k2_list = [0]
             else:
-                if self.MATRIX_BY_LAYERS:
+                if self.CHORDAL_DECOMPOSITION:
                     k2_list = [k - 1, k]
                 else:
                     k2_list = range(k, self.K + 1 if self.LAST_LAYER else self.K)

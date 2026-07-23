@@ -70,7 +70,7 @@ class CvxpyHandler:
 
     def __init__(self, **kwargs):
         print("Initializing CvxpyHandler")
-        self.MATRIX_BY_LAYERS = kwargs.get("MATRIX_BY_LAYERS", False)
+        self.CHORDAL_DECOMPOSITION = kwargs.get("CHORDAL_DECOMPOSITION", False)
         self.LAST_LAYER = kwargs.get("LAST_LAYER", False)
         self.BETAS = kwargs.get("BETAS", False)
         self.BETAS_Z = kwargs.get("BETAS_Z", False)

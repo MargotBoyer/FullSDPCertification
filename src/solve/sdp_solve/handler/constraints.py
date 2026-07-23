@@ -297,6 +297,7 @@ class CommonConstraints(VariablesCall):
                 "bound_type": None,
                 "dual_value": None,
                 "label": label,
+                "is_quadratic": False,
             }
         )
         # print(f"Creating new constraint {self.current_num_constraint} : {name}")

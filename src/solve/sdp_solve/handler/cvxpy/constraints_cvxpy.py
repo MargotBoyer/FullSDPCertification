@@ -44,6 +44,7 @@ class ConstraintsCvxpy(CommonConstraints):
                 nb_index=self.indexes_variables.max_index,
                 dividing_non_diag=True,
             )
+            self.list_cstr[self.current_num_constraint]["is_quadratic"] = True
 
     def build_cvxpy_constraints(self, cp_vars: List[cp.Variable]) -> List[cp.Expression]:
         """

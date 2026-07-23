@@ -1,7 +1,7 @@
 import mosek
 
 
-def matrix_by_layers_rec(self, only_linear_constraints: bool = False):
+def CHORDAL_DECOMPOSITION_rec(self, only_linear_constraints: bool = False):
     """
     Contraintes de cohérence entre matrices adjacentes (décomposition chordale).
 

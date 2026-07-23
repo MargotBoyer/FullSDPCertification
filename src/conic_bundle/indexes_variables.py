@@ -10,7 +10,7 @@ class Indexes_Variables_for_Conic_Bundle_Parser:
         self,
         K: int,
         n: List[int],
-        MATRIX_BY_LAYERS: bool = False,
+        CHORDAL_DECOMPOSITION: bool = False,
         LAST_LAYER: bool = True,
         BETAS: bool = False,
         BETAS_Z: bool = False,
@@ -26,7 +26,7 @@ class Indexes_Variables_for_Conic_Bundle_Parser:
             List of the number of neurons in each layer.
         K: int
             Number of layers.
-        matrix_by_layers: bool
+        CHORDAL_DECOMPOSITION: bool
             Whether to use matrix by layers or not.
         last_layer: bool
             Whether the last layer is included in the matrix of the z variables or not.
@@ -40,7 +40,7 @@ class Indexes_Variables_for_Conic_Bundle_Parser:
         self.n = n
         self.K = K
         self.ytrue = kwargs.get("ytrue", None)
-        self.MATRIX_BY_LAYERS = MATRIX_BY_LAYERS
+        self.CHORDAL_DECOMPOSITION = CHORDAL_DECOMPOSITION
         self.LAST_LAYER = LAST_LAYER
         self.BETAS = BETAS
         self.BETAS_Z = BETAS_Z

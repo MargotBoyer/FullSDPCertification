@@ -37,7 +37,7 @@ from .certification_problem_constraints_beta import (
     z_j2_beta_j2_less_than_zj,
 )
 from .certification_problem_constraints_division_by_layers import (
-    matrix_by_layers_rec,
+    CHORDAL_DECOMPOSITION_rec,
 )
 from .certification_problem_constraints_rlt import add_RLT_constraints
 from .certification_problem_constraints_sdp import first_term_equal_zero
@@ -56,7 +56,7 @@ logger_mosek = logging.getLogger("Mosek_logger")
     betai_betaj,
     zbar_max_z,
     ReLU_triangularization,
-    matrix_by_layers_rec,
+    CHORDAL_DECOMPOSITION_rec,
     add_RLT_constraints,
     McCormick_inter_layers,
     first_term_equal_zero,
@@ -77,7 +77,7 @@ class MzbarSDP(SDPSolver):
             ZBAR=True,
             **kwargs,
         )
-        print("MZBAR MATRIX BY LAYERS", self.MATRIX_BY_LAYERS)
+        print("MZBAR MATRIX BY LAYERS", self.CHORDAL_DECOMPOSITION)
 
     def add_objective(self):
         """
@@ -129,8 +129,8 @@ class MzbarSDP(SDPSolver):
         self.first_term_equal_zero()
 
         # MATRIX BY LAYERS
-        if self.MATRIX_BY_LAYERS:
-            self.matrix_by_layers_rec(only_linear_constraints=True)
+        if self.CHORDAL_DECOMPOSITION:
+            self.CHORDAL_DECOMPOSITION_rec(only_linear_constraints=True)
 
         if self.LAST_LAYER:
             self.last_layer_linear_equality()

@@ -34,6 +34,134 @@ MIQCP  qp    = NULL;
 SDP    psdp;           /* struct (pas pointeur) */
 double sol_sdp = 0.0;
 
+/* Globals normalement définis dans smiqp.c (exclus car il contient main()) */
+Q_MIQCP  qqp  = NULL;  /* problème quadratique étendu (non utilisé dans la phase SDP) */
+C_MIQCP  cqp  = NULL;  /* problème continu relaxé (non utilisé dans la phase SDP) */
+int      nb_var_cont   = 0;
+int      nb_var_int    = 0;
+int      nb_var_01     = 0;
+int      nb_cont_01    = 0;
+int      nb_cont_sup_1 = 0;
+long     start_time    = 0;
+int      nb_generator  = 0;
+int      nb_nodes      = 0;
+int     *selection_order = NULL;
+
+/* ---------------------------------------------------------------------- */
+/* Solveur SDP externe (remplace Mosek si enregistré)                      */
+/* ---------------------------------------------------------------------- */
+
+/* Type identique à celui déclaré dans solver_sdp_mixed.c */
+typedef void (*sdp_solver_cb_t)(
+    int n, int mq, int pq,
+    const double *q_beta,
+    const double *c_beta,
+    double        l_beta,
+    double       *x_out,
+    double       *beta_diag_out,
+    double       *alphaq_out,
+    double       *alphabisq_out,
+    double       *sol_sdp_out
+);
+
+/* Définition du pointeur global (extern dans solver_sdp_mixed.c) */
+sdp_solver_cb_t _sdp_solve_cb = NULL;
+
+/**
+ * miqcr_register_sdp_solver — enregistre un callback Python comme solveur SDP.
+ *
+ * À appeler depuis Python (via ctypes) après miqcr_populate_qp() et avant
+ * miqcr_compute_betas(). Une fois enregistré, run_sdp_solver_mixed_mosek()
+ * appelle ce callback à chaque itération de la Conic Bundle au lieu de Mosek.
+ *
+ * Le callback reçoit :
+ *   n, mq, pq          : dimensions
+ *   q_beta[n*n]        : partie quadratique de C_beta (row-major)
+ *   c_beta[n]          : partie linéaire de C_beta
+ *   l_beta             : constante scalaire
+ *
+ * Le callback doit écrire dans :
+ *   x_out[(n+1)(n+2)/2]: triangle inférieur de X (format Mosek)
+ *   beta_diag_out[n]   : duaux des contraintes diagonales
+ *   alphaq_out[mq]     : duaux de <Aq_k,X>=bq_k
+ *   alphabisq_out[pq]  : duaux de <Dq_k,X><=eq_k
+ *   sol_sdp_out[1]     : valeur objective <C_beta,X>
+ *
+ * Passer cb=NULL pour revenir à Mosek.
+ */
+void miqcr_register_sdp_solver(sdp_solver_cb_t cb)
+{
+    _sdp_solve_cb = cb;
+    if (cb != NULL)
+        printf("[miqcr_pyapi] Solveur SDP externe enregistré.\n");
+    else
+        printf("[miqcr_pyapi] Retour au solveur Mosek.\n");
+}
+
+
+/* ---------------------------------------------------------------------- */
+/* Interception de run_sdp_solver_mixed_mosek via --wrap du linker         */
+/*                                                                          */
+/* Le flag -Wl,--wrap=run_sdp_solver_mixed_mosek dans Makefile.pyapi fait  */
+/* que tout appel à run_sdp_solver_mixed_mosek() est redirigé ici.         */
+/* __real_run_sdp_solver_mixed_mosek() pointe vers l'implémentation Mosek  */
+/* dans solver_sdp_mixed.o (appelée uniquement si aucun callback n'est     */
+/* enregistré).                                                             */
+/* ---------------------------------------------------------------------- */
+
+/* Déclaration de la version originale Mosek (résolue par le linker) */
+extern void __real_run_sdp_solver_mixed_mosek(double **x);
+
+/* Déclarations des fonctions MIQCR nécessaires pour le chemin callback */
+extern void dualized_objective_function(SDP psdp,
+                                        double **q_beta,
+                                        double **c_beta,
+                                        double  *l_beta);
+
+void __wrap_run_sdp_solver_mixed_mosek(double **x)
+{
+    if (_sdp_solve_cb == NULL) {
+        /* Aucun solveur externe : on délègue à Mosek */
+        __real_run_sdp_solver_mixed_mosek(x);
+        return;
+    }
+
+    /* Calcule la matrice objectif dualisée à partir des betas courants */
+    double *q_beta = NULL;
+    double *c_beta = NULL;
+    double  l_beta = 0.0;
+    dualized_objective_function(psdp, &q_beta, &c_beta, &l_beta);
+
+    int n   = psdp->n;
+    int mq  = psdp->mq;
+    int pq  = psdp->pq;
+    int len = (n + 1) * (n + 2) / 2;
+
+    /* Alloue les buffers de sortie */
+    double *beta_diag_buf  = alloc_vector_d(n);
+    double *alphaq_buf     = alloc_vector_d(mq > 0 ? mq : 1);
+    double *alphabisq_buf  = alloc_vector_d(pq > 0 ? pq : 1);
+    double  sol_out        = 0.0;
+
+    /* Appelle le solveur Python */
+    _sdp_solve_cb(n, mq, pq,
+                  q_beta, c_beta, l_beta,
+                  x[0],
+                  beta_diag_buf,
+                  alphaq_buf,
+                  alphabisq_buf,
+                  &sol_out);
+
+    /* Écrit les résultats dans psdp (attendus par eval_fun_mixed) */
+    psdp->beta_diag  = beta_diag_buf;
+    if (mq > 0) psdp->alphaq    = alphaq_buf;
+    if (pq > 0) psdp->alphabisq = alphabisq_buf;
+    sol_sdp = sol_out;
+
+    free(q_beta);
+    free(c_beta);
+}
+
 /* Variables B&B non utilisées en mode SDP-only, mais déclarées pour l'édition */
 double ub_bb   = 1e10;
 double lb_bb   = -1e10;
@@ -113,8 +241,7 @@ void miqcr_populate_qp(
 {
     /* Libère l'éventuel qp précédent */
     if (qp != NULL) {
-        free_miqcp(qp);
-        free(qp);
+        free_miqcp();
         qp = NULL;
     }
 
@@ -123,6 +250,14 @@ void miqcr_populate_qp(
         fprintf(stderr, "[miqcr_pyapi] Échec d'allocation de qp\n");
         return;
     }
+
+    /* new_miqcp() utilise malloc() (pas calloc()), donc les champs non affectés
+     * ci-dessous restent non initialisés.  free_miqcp() appelle
+     * free_vector(qp->lg) et free_vector(qp->lgc) : si ces pointeurs sont
+     * garbage, cela provoque "free(): invalid pointer" à l'appel suivant.
+     * On les initialise à NULL pour que free(NULL) soit un no-op légal. */
+    qp->lg  = NULL;
+    qp->lgc = NULL;
 
     /* Dimensions */
     qp->n      = n;
@@ -199,6 +334,24 @@ void miqcr_populate_qp(
     qp->sol_adm  = 1e30;
     qp->local_sol = NULL;
 
+    /* Calcul des compteurs de types de variables (normalement fait dans smiqp.c
+     * après read_file — absents ici car smiqp.c contient main() et est exclu).
+     * Ces globaux dimensionnent les tableaux de contraintes dans run_sdp_solver_mixed_mosek ;
+     * des valeurs à 0 provoquent des débordements de tampon → corruption heap. */
+    nb_var_int    = 0;
+    nb_var_01     = 0;
+    nb_cont_01    = 0;
+    nb_cont_sup_1 = 0;
+    for (int _i = 0; _i < nb_int; _i++) {
+        if (qp->u[_i] != 1) nb_var_int++;
+        else                 nb_var_01++;
+    }
+    for (int _i = nb_int; _i < n; _i++) {
+        if (qp->u[_i] == 1 && qp->l[_i] == 0) nb_cont_01++;
+        if (qp->l[_i] >= 1)                     nb_cont_sup_1++;
+    }
+    nb_var_cont = n - nb_var_int - nb_var_01;
+
     /* Construit la structure SDP interne à partir de qp */
     create_sdp_mixed();
 
@@ -237,18 +390,18 @@ void miqcr_compute_betas(
     compute_alpha_beta_sbb_miqcr();
 
     /* Copie les betas finaux (matrice n×n, row-major = ij2k) */
-    if (psdp.beta != NULL) {
-        memcpy(out_beta, psdp.beta, (size_t)n * n * sizeof(double));
+    if (psdp->beta != NULL) {
+        memcpy(out_beta, psdp->beta, (size_t)n * n * sizeof(double));
     } else {
         memset(out_beta, 0, (size_t)n * n * sizeof(double));
     }
 
     /* Duaux des contraintes quadratiques */
-    if (mq > 0 && psdp.alphaq != NULL) {
-        memcpy(out_alphaq, psdp.alphaq, (size_t)mq * sizeof(double));
+    if (mq > 0 && psdp->alphaq != NULL) {
+        memcpy(out_alphaq, psdp->alphaq, (size_t)mq * sizeof(double));
     }
-    if (pq > 0 && psdp.alphabisq != NULL) {
-        memcpy(out_alphabisq, psdp.alphabisq, (size_t)pq * sizeof(double));
+    if (pq > 0 && psdp->alphabisq != NULL) {
+        memcpy(out_alphabisq, psdp->alphabisq, (size_t)pq * sizeof(double));
     }
 
     /* Valeur SDP */

@@ -27,7 +27,7 @@ def get_results_trivially_solved(self):
         "Nb_stable_actives": len(self.stable_actives_neurons),
     }
     if self.__class__.__name__=="TargetedSDP" or self.__class__.__name__=="UntargetedSDP":
-        dic_benchmark["MATRIX_BY_LAYERS"] = self.MATRIX_BY_LAYERS
+        dic_benchmark["CHORDAL_DECOMPOSITION"] = self.CHORDAL_DECOMPOSITION
     print("dic benchmark keys : ", dic_benchmark)
     if self.benchmark_dataframe is None:
         self.benchmark_dataframe = pd.DataFrame(dic_benchmark, index=[0])

@@ -81,7 +81,7 @@ class SDPSolver(Solver):
 
     def __init__(
         self,
-        MATRIX_BY_LAYERS = False,  # Union[bool, List[List[int]]]
+        CHORDAL_DECOMPOSITION = False,  # Union[bool, List[List[int]]]
         LAST_LAYER: bool = False,
         BETAS: bool = False,
         BETAS_Z: bool = False,
@@ -97,7 +97,7 @@ class SDPSolver(Solver):
         super().__init__(LAST_LAYER=LAST_LAYER, INPUT_IN_VARIABLES=INPUT_IN_VARIABLES, **kwargs)
         self.solver_time_limit = solver_time_limit
 
-        self.MATRIX_BY_LAYERS = MATRIX_BY_LAYERS
+        self.CHORDAL_DECOMPOSITION = CHORDAL_DECOMPOSITION
         # INPUT_IN_VARIABLES normalized to bool by generic_solver.__init__; do not override here
         assert self.keep_penultimate_actives is not None
 
@@ -171,7 +171,7 @@ class SDPSolver(Solver):
             b=self.network.b,
             L=self.L,
             U=self.U,
-            MATRIX_BY_LAYERS=self.MATRIX_BY_LAYERS,
+            CHORDAL_DECOMPOSITION=self.CHORDAL_DECOMPOSITION,
             keep_penultimate_actives=self.keep_penultimate_actives,
             LAST_LAYER=self.LAST_LAYER,
             BETAS=self.BETAS,
@@ -217,7 +217,7 @@ class SDPSolver(Solver):
             "target": getattr(self, "ytarget", None),
             "epsilon": self.epsilon,
             "status": "pre-solve",
-            "MATRIX_BY_LAYERS": str(self.MATRIX_BY_LAYERS),
+            "CHORDAL_DECOMPOSITION": str(self.CHORDAL_DECOMPOSITION),
             "LAST_LAYER": self.LAST_LAYER,
             "USE_STABLE_ACTIVES": self.use_active_neurons,
             "USE_STABLE_INACTIVES": self.use_inactive_neurons,
@@ -494,6 +494,10 @@ class SDPSolver(Solver):
         self.handler.is_robust = False  # safe default in parent
         is_robust_shared = mp.Value("b", 0)
 
+        # Flush before fork so the child starts with an empty buffer and cannot
+        # accidentally re-emit buffered parent output (triangular-pattern bug).
+        sys.stdout.flush()
+        sys.stderr.flush()
         pid = os.fork()
         if pid == 0:
             # ---- CHILD PROCESS ----
@@ -552,7 +556,7 @@ class SDPSolver(Solver):
             "epsilon": self.epsilon,
             "status": "crashed",
             "optimal_value": None,
-            "MATRIX_BY_LAYERS": str(self.MATRIX_BY_LAYERS),
+            "CHORDAL_DECOMPOSITION": str(self.CHORDAL_DECOMPOSITION),
             "LAST_LAYER": self.LAST_LAYER,
             "USE_STABLE_ACTIVES": self.use_active_neurons,
             "USE_STABLE_INACTIVES": self.use_inactive_neurons,

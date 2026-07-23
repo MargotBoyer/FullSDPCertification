@@ -71,7 +71,7 @@ class MosekClassicHandler:
             List of the number of neurons in each layer.
         K: int
             Number of layers.
-        matrix_by_layers: bool
+        CHORDAL_DECOMPOSITION: bool
             Whether to use matrix by layers or not.
         last_layer: bool
             Whether the last layer is included in the matrix of the z variables or not.
@@ -81,13 +81,13 @@ class MosekClassicHandler:
             Whether to include the beta variables in the matrixes for z variables.
         zbar: bool
             Whether to include the zbar variables or not.
-        MATRIX_BY_LAYERS: bool
+        CHORDAL_DECOMPOSITION: bool
             Whether to divide matrix variables by layers or not divide them.
         LAST_LAYER: bool
             Whether the last layer is included in the matrix of the z variables or not.
         """
         print("Initializing MosekClassicHandler")
-        self.MATRIX_BY_LAYERS = kwargs.get("MATRIX_BY_LAYERS", False)
+        self.CHORDAL_DECOMPOSITION = kwargs.get("CHORDAL_DECOMPOSITION", False)
 
         self.LAST_LAYER = kwargs.get("LAST_LAYER", False)
         self.BETAS = kwargs.get("BETAS", False)

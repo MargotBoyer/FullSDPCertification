@@ -88,6 +88,7 @@ class ConstraintsFusion(CommonConstraints):
                 nb_index=self.indexes_variables.max_index,
                 dividing_non_diag=False,
             )
+            self.list_cstr[self.current_num_constraint]["is_quadratic"] = True
 
     def add_to_task(self):
         """

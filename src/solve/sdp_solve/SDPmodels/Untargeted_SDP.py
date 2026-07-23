@@ -44,7 +44,7 @@ from .certification_problem_constraints_beta import (
     sum_beta_j_z_i_equal_z_i_layer
 )
 from .certification_problem_constraints_division_by_layers import (
-    matrix_by_layers_rec,
+    CHORDAL_DECOMPOSITION_rec,
 )
 from .certification_problem_constraints_rlt import add_RLT_constraints
 from .certification_problem_constraints_sdp import first_term_equal_zero
@@ -69,7 +69,7 @@ logger_mosek = logging.getLogger("Mosek_logger")
     sum_beta_i_beta_j_equal_beta_i,
     betai_betaj,
     ReLU_triangularization,
-    matrix_by_layers_rec,
+    CHORDAL_DECOMPOSITION_rec,
     add_RLT_constraints,
     McCormick_inter_layers,
     first_term_equal_zero,
@@ -172,8 +172,8 @@ class UntargetedSDP(SDPSolver):
         # Finalisation (first_term, décomposition chordale, last_layer)
         _n = _snap()
         self.first_term_equal_zero()
-        if self.MATRIX_BY_LAYERS:
-            self.matrix_by_layers_rec(only_linear_constraints=True)
+        if self.CHORDAL_DECOMPOSITION:
+            self.CHORDAL_DECOMPOSITION_rec(only_linear_constraints=True)
         if self.LAST_LAYER:
             self.last_layer_linear_equality()
         self._cut_constraint_counts["baseline_other"] = _snap() - _n

@@ -54,7 +54,7 @@ models :
     - "triangularization"
     RLT_prop : 0.2
     all_combinations_cuts : false
-    MATRIX_BY_LAYERS: true
+    CHORDAL_DECOMPOSITION: true
     LAST_LAYER: false
     use_fusion: false  # Whether to use the fusion API for MOSEK
     use_active_neurons: false # Whether to use active neurons in the certification problem as variables

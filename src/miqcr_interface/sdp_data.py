@@ -17,7 +17,10 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict
 
-import mosek
+try:
+    import mosek
+except ImportError:
+    mosek = None  # mosek not installed; extract_miqcr_data will not be available
 
 
 # ---------------------------------------------------------------------------
@@ -128,10 +131,6 @@ def _build_var_map(indexes) -> Tuple[List, Dict, np.ndarray, np.ndarray]:
 # Conversion d'une contrainte Mosek → entrée MIQCR
 # ---------------------------------------------------------------------------
 
-def _is_linear(i_arr) -> bool:
-    """Vraie si tous les termes quadratiques ont i=0 (termes linéaires uniquement)."""
-    return all(int(x) == 0 for x in i_arr)
-
 
 def _add_quad_entry(mat, flat_i: int, flat_j: int, val: float, sign: float = 1.0):
     """Ajoute val (avec signe) à la position (flat_i, flat_j) du tenseur MIQCR 3D."""
@@ -210,7 +209,7 @@ def _build_lin_row(
 # Fonction principale
 # ---------------------------------------------------------------------------
 
-def extract_miqcr_data(handler) -> MiqcrData:
+def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
     """
     Extrait les matrices MIQCR depuis un handler Mosek après construction du modèle.
 
@@ -223,6 +222,12 @@ def extract_miqcr_data(handler) -> MiqcrData:
     ----------
     handler : MosekClassicHandler (ou compatible)
         Le handler dont on extrait le modèle.
+    max_quad_constraints : int | None
+        Nombre maximum de contraintes quadratiques (mq + pq) à passer à MIQCR.
+        Chaque contrainte quadratique exige une matrice dense (n+1)×(n+1) ;
+        pour les grands réseaux cela sature la mémoire très vite.
+        None → auto-limite à ~1 Go de matrices.
+        0   → aucune contrainte quadratique (utile pour valider le pipeline).
 
     Retourne
     --------
@@ -230,6 +235,41 @@ def extract_miqcr_data(handler) -> MiqcrData:
     """
     indexes = handler.indexes_matrices
     flat_order, flat_idx_of, var_map, n_vars = _build_var_map(indexes)
+
+    # --- Estimation mémoire et calcul de la limite ---
+    list_cstr = handler.Constraints.list_cstr
+    n_quad_total = sum(1 for c in list_cstr if c["is_quadratic"])
+    bytes_per_mat = (n_vars + 1) ** 2 * 8
+    print("bytes_per_mat =", bytes_per_mat)
+    mem_est_gb = n_quad_total * bytes_per_mat / 1e9
+    print("max_quad_constraints =", max_quad_constraints)
+
+    print(f"[extract_miqcr_data] n_vars={n_vars} | {len(list_cstr)} contraintes "
+          f"({n_quad_total} quadratiques)")
+    print(f"[extract_miqcr_data] Mémoire dense estimée si toutes quadratiques : "
+          f"{mem_est_gb:.1f} Go")
+
+    if max_quad_constraints is None:
+        budget_bytes = 1e9  # 1 Go
+        print(" int(budget_bytes / bytes_per_mat)", int(budget_bytes / bytes_per_mat))
+        max_quad_constraints = max(0, int(budget_bytes / bytes_per_mat))
+
+        if max_quad_constraints < n_quad_total:
+            print(f"[extract_miqcr_data] Limite auto à {max_quad_constraints} contraintes "
+                  f"quadratiques (budget 1 Go). Passer max_quad_constraints= pour changer.")
+
+    if max_quad_constraints < n_quad_total:
+        print(f"[extract_miqcr_data] ATTENTION : {n_quad_total - max_quad_constraints} "
+              f"contraintes quadratiques ignorées.")
+
+    print("[extract_miqcr_data] Construction des matrices MIQCR... avec max_quad_constraints =", max_quad_constraints)
+
+    def _arr_info(arr):
+        if arr.size == 0:
+            return "(vide)"
+        nnz = int(np.count_nonzero(arr))
+        return (f"shape={arr.shape}  nnz={nnz}/{arr.size}"
+                f"  min={arr.min():.4g}  max={arr.max():.4g}  mean={arr.mean():.4g}")
 
     # --- Bornes u, l ---
     u_flat = np.zeros(n_vars)
@@ -239,6 +279,9 @@ def extract_miqcr_data(handler) -> MiqcrData:
     for (layer, j), fi in flat_idx_of.items():
         u_flat[fi] = float(U[layer][j])
         l_flat[fi] = float(L[layer][j])
+
+    print(f"[MIQCR] u  : {_arr_info(u_flat)}")
+    print(f"[MIQCR] l  : {_arr_info(l_flat)}")
 
     # --- Objectif : Q (n×n) et c (n,) ---
     handler.Objective.format_obj()
@@ -256,14 +299,17 @@ def extract_miqcr_data(handler) -> MiqcrData:
         i  = int(i_obj[k])
         j  = int(j_obj[k])
         v  = float(v_obj[k])
+        print(f"[MIQCR] Objectif : k={k}  nm={nm}  i={i}  j={j}  v={v:.4g}")
 
         if i == 0:
             fj = var_map.get((nm, j))
+            print("fj :", fj)
             if fj is not None:
                 c[fj] += v
         else:
             fi = var_map.get((nm, i))
             fj = var_map.get((nm, j))
+            print("fi : ", fi, "  fj :", fj)
             if fi is not None and fj is not None:
                 if fi == fj:
                     Q[fi, fj] += v
@@ -271,13 +317,21 @@ def extract_miqcr_data(handler) -> MiqcrData:
                     Q[fi, fj] += v / 2
                     Q[fj, fi] += v / 2
 
+    print(f"[MIQCR] Q  : {_arr_info(Q)}  (constante obj={cons_obj:.4g})")
+    print("[MIQCR Q  = ", Q)
+    print(f"[MIQCR] c  : {_arr_info(c)}")
+    print("[MIQCR c  = ", c)
+
     # --- Contraintes ---
     lin_eq_rows, lin_eq_rhs   = [], []
     lin_ineq_rows, lin_ineq_rhs = [], []
     quad_eq_mats, quad_eq_rhs  = [], []
     quad_ineq_mats, quad_ineq_rhs = [], []
 
-    for cstr in handler.Constraints.list_cstr:
+    n_quad_kept = 0
+
+    for cstr in list_cstr:
+        print("\n [extract_miqcr_data] = ", cstr['name'])
         nm_arr = cstr["num_matrix"]
         i_arr  = cstr["i"]
         j_arr  = cstr["j"]
@@ -287,25 +341,31 @@ def extract_miqcr_data(handler) -> MiqcrData:
         lb = float(cstr["lb"]) if cstr["lb"] is not None else None
         ub = float(cstr["ub"]) if cstr["ub"] is not None else None
 
-        linear = _is_linear(i_arr)
+        linear = not cstr["is_quadratic"]
+        print(f"[extract_miqcr_data] Contrainte {'linéaire' if linear else 'quadratique'} ")
 
         if linear:
             row = _build_lin_row(n_vars, nm_arr, i_arr, j_arr, v_arr, var_map)
+            print('[extract_miqcr_data] row : ', row)
 
             if bound_type == mosek.boundkey.fx:
+                print('[extract_miqcr_data] Contrainte linéaire d\'égalité')
                 lin_eq_rows.append(row)
                 lin_eq_rhs.append(lb - constant)
 
             elif bound_type == mosek.boundkey.up:
+                print('[extract_miqcr_data] Contrainte linéaire d\'inégalité')
                 lin_ineq_rows.append(row)
                 lin_ineq_rhs.append(ub - constant)
 
             elif bound_type == mosek.boundkey.lo:
+                print('[extract_miqcr_data] Contrainte linéaire d\'inégalité (borne inférieure)')
                 # sum ≥ lb → -sum ≤ -(lb - constant)
                 lin_ineq_rows.append(-row)
                 lin_ineq_rhs.append(constant - lb)
 
             elif bound_type == mosek.boundkey.ra:
+                print('[extract_miqcr_data] Contrainte linéaire double borne')
                 # lb ≤ sum ≤ ub → deux inégalités
                 lin_ineq_rows.append(row)
                 lin_ineq_rhs.append(ub - constant)
@@ -313,40 +373,62 @@ def extract_miqcr_data(handler) -> MiqcrData:
                 lin_ineq_rhs.append(constant - lb)
 
         else:
+            #print('[extract_miqcr_data] Contrainte quadratique')
+            # Contrainte quadratique : vérifier le budget avant d'allouer
+            if n_quad_kept >= max_quad_constraints:
+                #print("[extract_miqcr_data] Limite de contraintes quadratiques atteinte, ")
+                continue
+            n_quad_kept += 1
+
             if bound_type == mosek.boundkey.fx:
+                #print('[extract_miqcr_data] Contrainte quadratique d\'égalité')
                 M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
                                         constant, var_map, sign=1.0)
+                #print("[extract_miqcr_data] Matrice quadratique :\n", M)
                 quad_eq_mats.append(M)
                 quad_eq_rhs.append(lb)
 
             elif bound_type == mosek.boundkey.up:
+                #print('[extract_miqcr_data] Contrainte quadratique d\'inégalité')
                 M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
                                         constant, var_map, sign=1.0)
+                #print("[extract_miqcr_data] Matrice quadratique :\n", M)
                 quad_ineq_mats.append(M)
                 quad_ineq_rhs.append(ub)
 
             elif bound_type == mosek.boundkey.lo:
+                #print('[extract_miqcr_data] Contrainte quadratique d\'inégalité (borne inférieure)')
                 # sum ≥ lb → -sum ≤ -lb  (on négative la matrice et le constant)
                 M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
                                         constant, var_map, sign=-1.0)
+                #print("[extract_miqcr_data] Matrice quadratique :\n", M)
                 quad_ineq_mats.append(M)
                 quad_ineq_rhs.append(-lb)
 
             elif bound_type == mosek.boundkey.ra:
+                #print('[extract_miqcr_data] Contrainte quadratique double borne')
                 M_up = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
                                            constant, var_map, sign=1.0)
+                #print("[extract_miqcr_data] Matrice quadratique (borne sup) :\n", M_up)
                 quad_ineq_mats.append(M_up)
                 quad_ineq_rhs.append(ub)
                 M_lo = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
                                            constant, var_map, sign=-1.0)
+                #print("[extract_miqcr_data] Matrice quadratique (borne inf) :\n", M_lo)
                 quad_ineq_mats.append(M_lo)
                 quad_ineq_rhs.append(-lb)
-
+                # ra compte pour 2 dans le budget
+                n_quad_kept += 1
+            else : 
+                raise ValueError(f"Type de borne inconnu : {bound_type}")
     # --- Assemblage final ---
     m  = len(lin_eq_rows)
     p  = len(lin_ineq_rows)
     mq = len(quad_eq_mats)
     pq = len(quad_ineq_mats)
+
+    print(f"[extract_miqcr_data] Assemblage : m={m} lin_eq | p={p} lin_ineq | "
+          f"mq={mq} quad_eq | pq={pq} quad_ineq")
 
     A = np.array(lin_eq_rows,   dtype=np.float64) if m  > 0 else np.zeros((0, n_vars))
     b = np.array(lin_eq_rhs,    dtype=np.float64) if m  > 0 else np.zeros(0)
@@ -357,6 +439,15 @@ def extract_miqcr_data(handler) -> MiqcrData:
     bq = np.array(quad_eq_rhs,    dtype=np.float64) if mq > 0 else np.zeros(0)
     Dq = np.stack(quad_ineq_mats, axis=0) if pq > 0 else np.zeros((0, n_vars + 1, n_vars + 1))
     eq = np.array(quad_ineq_rhs,  dtype=np.float64) if pq > 0 else np.zeros(0)
+
+    print(f"[MIQCR] A  : {_arr_info(A)}")
+    print(f"[MIQCR] b  : {_arr_info(b)}")
+    print(f"[MIQCR] D  : {_arr_info(D)}")
+    print(f"[MIQCR] e  : {_arr_info(e)}")
+    print(f"[MIQCR] Aq : {_arr_info(Aq)}")
+    print(f"[MIQCR] bq : {_arr_info(bq)}")
+    print(f"[MIQCR] Dq : {_arr_info(Dq)}")
+    print(f"[MIQCR] eq : {_arr_info(eq)}")
 
     return MiqcrData(
         n=n_vars,

@@ -7,7 +7,7 @@ Invariants vérifiés (voir CLAUDE.md §"Invariants théoriques") :
      (TargetedSDP inclut toujours la triangularisation — les coupes s'ajoutent par-dessus)
   3. SDPu ≤ SDPt : val(UntargetedSDP, triang) ≤ val(TargetedSDP_j) pour chaque target j
   4. SDPu ≤ min_j SDPt : val(UntargetedSDP) ≤ min_j val(TargetedSDP_j)
-  5. Relaxation chordale : val(TargetedSDP, MATRIX_BY_LAYERS=True) ≤ val(TargetedSDP, MATRIX_BY_LAYERS=False)
+  5. Relaxation chordale : val(TargetedSDP, CHORDAL_DECOMPOSITION=True) ≤ val(TargetedSDP, CHORDAL_DECOMPOSITION=False)
 
 Réseau de test : blob_4x10 — K=5, n=[2,10,10,10,10,3], epsilon=0.5, Linf.
 Bornes pré-calculées (alpha-CROWN) chargées depuis data/bounds/blob_4x10-0.5_linf.csv.
@@ -156,12 +156,12 @@ def _base_kwargs(inst: dict) -> dict:
     )
 
 
-def _lan(inst: dict, ytarget: int, cuts: list, matrix_by_layers: bool = True, tag: str = "") -> TargetedSDP:
+def _lan(inst: dict, ytarget: int, cuts: list, CHORDAL_DECOMPOSITION: bool = True, tag: str = "") -> TargetedSDP:
     folder = os.path.join(inst["folder"], "lan" + tag)
     return TargetedSDP(
         ytarget=ytarget,
         cuts=cuts,
-        MATRIX_BY_LAYERS=matrix_by_layers,
+        CHORDAL_DECOMPOSITION=CHORDAL_DECOMPOSITION,
         folder_name=folder,
         **_base_kwargs(inst),
     )
@@ -171,7 +171,7 @@ def _md(inst: dict, cuts: list, tag: str = "") -> UntargetedSDP:
     folder = os.path.join(inst["folder"], "md" + tag)
     return UntargetedSDP(
         cuts=cuts,
-        MATRIX_BY_LAYERS=True,
+        CHORDAL_DECOMPOSITION=True,
         folder_name=folder,
         **_base_kwargs(inst),
     )
@@ -335,8 +335,8 @@ class TestRelaxationChordale:
 
     def test_chordal_leq_classique_par_target(self, instance):
         for j in instance["ytargets"]:
-            v_classic = _solve(_lan(instance, j, cuts=[], matrix_by_layers=False, tag=f"_chor_classic{j}"))
-            v_chordal = _solve(_lan(instance, j, cuts=[], matrix_by_layers=True, tag=f"_chor_chordal{j}"))
+            v_classic = _solve(_lan(instance, j, cuts=[], CHORDAL_DECOMPOSITION=False, tag=f"_chor_classic{j}"))
+            v_chordal = _solve(_lan(instance, j, cuts=[], CHORDAL_DECOMPOSITION=True, tag=f"_chor_chordal{j}"))
             if v_classic is None or v_chordal is None:
                 continue
             assert v_chordal <= v_classic + ATOL, (

@@ -163,7 +163,7 @@ def ReLU_constraint_Lan(
                 # z_0[pruned] not SDP variables: quadratic terms z_1[j]*z_0[i] unavailable.
                 # Skip this sub-constraint (valid relaxation: feasible set enlarges).
                 continue
-            if self.MATRIX_BY_LAYERS and (
+            if self.CHORDAL_DECOMPOSITION and (
                 any((k - 1, i) in self.stable_actives_neurons for i in range(self.n[k - 1]))):
                 # The constraint cannot be added as it links products of variables from different matrices : a relaxation is needed
                 # print("STUDY COEFF Relaxation of ReLU constraint for layer", k, "neuron", j)

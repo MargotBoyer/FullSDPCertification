@@ -82,7 +82,7 @@ def initialize_variables(self):
     assert len(self.indexes_matrices.current_matrices_variables) == self.indexes_matrices.nb_matrices, (                                                                                    
         f"Nombre de matrices incohérent : {len(self.indexes_matrices.current_matrices_variables)} créées "                                                                                  
         f"mais {self.indexes_matrices.nb_matrices} attendues "                                                                                                                              
-        f"(BETAS_Z={self.BETAS_Z}, MATRIX_BY_LAYERS={self.MATRIX_BY_LAYERS}, "
+        f"(BETAS_Z={self.BETAS_Z}, CHORDAL_DECOMPOSITION={self.CHORDAL_DECOMPOSITION}, "
         f"LAST_LAYER={self.LAST_LAYER}, BETAS={self.BETAS}, K={self.K})"                                                                                                                    
     ) 
 

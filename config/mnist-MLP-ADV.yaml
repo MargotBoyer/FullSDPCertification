@@ -27,7 +27,7 @@ models :
   #   # - 0.1
   #   # - 0.2
   #   all_combinations_cuts : false
-  #   MATRIX_BY_LAYERS: false
+  #   CHORDAL_DECOMPOSITION: false
   #   LAST_LAYER: false
   #   use_fusion: false  # Whether to use the fusion API for MOSEK
   #   use_callback : false # Whether to use the callback for MOSEK
@@ -44,7 +44,7 @@ models :
   #   # - 0.1
   #   # - 0.2
   #   all_combinations_cuts : false
-  #   MATRIX_BY_LAYERS: true
+  #   CHORDAL_DECOMPOSITION: true
   #   LAST_LAYER: false
   #   use_fusion: false  # Whether to use the fusion API for MOSEK
   #   use_callback : false # Whether to use the callback for MOSEK
@@ -62,7 +62,7 @@ models :
   #   - 0.2
   #   #- 0.2
   #   all_combinations_cuts : false
-  #   MATRIX_BY_LAYERS: true
+  #   CHORDAL_DECOMPOSITION: true
   #   LAST_LAYER: false
   #   use_fusion: false  # Whether to use the fusion API for MOSEK
   #   use_callback : false # Whether to use the callback for MOSEK
@@ -84,7 +84,7 @@ models :
     RLT_props : 
     - 0.2
     all_combinations_cuts : false
-    MATRIX_BY_LAYERS: true
+    CHORDAL_DECOMPOSITION: true
     LAST_LAYER: false
     use_fusion: false  # Whether to use the fusion API for MOSEK
     use_callback : false # Whether to use the callback for MOSEK

@@ -29,7 +29,7 @@ from .certification_problem_constraints_forward_pass import (
     last_layer_linear_equality
 )
 from .certification_problem_constraints_rlt import add_RLT_constraints
-from .certification_problem_constraints_division_by_layers import matrix_by_layers_rec
+from .certification_problem_constraints_division_by_layers import CHORDAL_DECOMPOSITION_rec
 from .certification_problem_constraints_sdp import first_term_equal_zero
 from .certification_problem_relaxed_relu_heuristic import (
     add_z_quad_active_neuron_heuristic, 
@@ -50,7 +50,7 @@ logger_mosek = logging.getLogger("Mosek_logger")
     ReLU_triangularization,
     add_RLT_constraints,
     McCormick_inter_layers,
-    matrix_by_layers_rec,
+    CHORDAL_DECOMPOSITION_rec,
     first_term_equal_zero,
     all_Mc_Cormick_all_layers,
     all_4_McCormick,
@@ -126,8 +126,8 @@ class TargetedSDP(SDPSolver):
         self._cut_constraint_counts["allMC"] = _snap() - _n
 
         _n = _snap()
-        if self.MATRIX_BY_LAYERS:
-            self.matrix_by_layers_rec(only_linear_constraints=True)
+        if self.CHORDAL_DECOMPOSITION:
+            self.CHORDAL_DECOMPOSITION_rec(only_linear_constraints=True)
         if self.LAST_LAYER:
             self.last_layer_linear_equality()
         self.first_term_equal_zero()

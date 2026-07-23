@@ -145,9 +145,9 @@ class SDPSolverConfig(BaseModel):
             raise ValueError("RLT cuts are required, but RLT_prop is None.")
         return v
 
-    MATRIX_BY_LAYERS: Union[bool, List[List[int]]] = True
-    @validator("MATRIX_BY_LAYERS", pre=True)
-    def validate_and_normalize_matrix_by_layers(cls, v, values):
+    CHORDAL_DECOMPOSITION: Union[bool, List[List[int]]] = True
+    @validator("CHORDAL_DECOMPOSITION", pre=True)
+    def validate_and_normalize_CHORDAL_DECOMPOSITION(cls, v, values):
         """Normalise en List[List[int]] ou garde bool pour résolution tardive."""
         if isinstance(v, bool):
             return v  # résolution tardive quand K est connu
@@ -162,7 +162,7 @@ class SDPSolverConfig(BaseModel):
                 )
             return v
            
-        raise ValueError(f"MATRIX_BY_LAYERS must be bool or List[List[int]], got {type(v)}")
+        raise ValueError(f"CHORDAL_DECOMPOSITION must be bool or List[List[int]], got {type(v)}")
     LAST_LAYER: bool = (
         False  # Whether to use the last layer of the network (logits) as variables
     )
@@ -278,12 +278,12 @@ class FullCertificationConfig(BaseModel):
         if network is not None:
             K = network.K
             for model in v:
-                if isinstance(model.MATRIX_BY_LAYERS, list):
-                    last_index = model.MATRIX_BY_LAYERS[-1][-1]
+                if isinstance(model.CHORDAL_DECOMPOSITION, list):
+                    last_index = model.CHORDAL_DECOMPOSITION[-1][-1]
                     expected_last = 7 if model.LAST_LAYER else K - 1
                     if last_index != expected_last:
                         raise ValueError(
-                            f"With LAST_LAYER={model.LAST_LAYER}, last element of MATRIX_BY_LAYERS "
+                            f"With LAST_LAYER={model.LAST_LAYER}, last element of CHORDAL_DECOMPOSITION "
                             f"must be {expected_last}, got {last_index}."
                         )
         return v

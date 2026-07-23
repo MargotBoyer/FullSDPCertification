@@ -26,7 +26,7 @@ from .certification_problem_constraints_forward_pass import (
     ReLU_triangularization,
 )
 from .certification_problem_constraints_rlt import add_RLT_constraints
-from .certification_problem_constraints_division_by_layers import matrix_by_layers_rec
+from .certification_problem_constraints_division_by_layers import CHORDAL_DECOMPOSITION_rec
 from .certification_problem_constraints_sdp import first_term_equal_zero
 
 
@@ -40,7 +40,7 @@ logger_mosek = logging.getLogger("Mosek_logger")
     ReLU_triangularization,
     add_RLT_constraints,
     McCormick_inter_layers,
-    matrix_by_layers_rec,
+    CHORDAL_DECOMPOSITION_rec,
     first_term_equal_zero,
     all_Mc_Cormick_all_layers,
     all_4_McCormick,

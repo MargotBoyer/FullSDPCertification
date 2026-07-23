@@ -334,7 +334,7 @@ class VariablesCall:
         )  # ATTENTION : CECI POSERA UN PROBLEME POUR LES CONTRAINTES TRIANGULAIRES
 
         self.LAST_LAYER = kwargs.get("LAST_LAYER", None)
-        self.MATRIX_BY_LAYERS = kwargs.get("MATRIX_BY_LAYERS", None)
+        self.CHORDAL_DECOMPOSITION = kwargs.get("CHORDAL_DECOMPOSITION", None)
         self.BETAS = kwargs.get("BETAS", None)
         self.INPUT_IN_VARIABLES = kwargs.get("INPUT_IN_VARIABLES", True)
         self.kept_input_neurons = kwargs.get("kept_input_neurons", set(range(int(self.n[0]))))
@@ -366,7 +366,7 @@ class VariablesCall:
                 )
 
                 is_boundary_layer = len(self.indexes_matrices._layer_to_groups.get(layer, [])) > 1
-                decomposed_in_front_and_back_matrix = ((not ((layer,neuron) in self.stable_actives_neurons)) and (layer < self.K or self.LAST_LAYER)) and self.MATRIX_BY_LAYERS and is_boundary_layer
+                decomposed_in_front_and_back_matrix = ((not ((layer,neuron) in self.stable_actives_neurons)) and (layer < self.K or self.LAST_LAYER)) and self.CHORDAL_DECOMPOSITION and is_boundary_layer
                 
                 self.equivalent_neurons.create_dict(layer=layer, neuron=neuron, K = self.K, 
                                                     LAST_LAYER=self.LAST_LAYER, 
@@ -516,7 +516,7 @@ class VariablesCall:
             line += f"Layer {layer}:\n"
             for neuron in range(self.n[layer]):
                 
-                decomposed_in_front_and_back_matrix = (not ((layer,neuron) in self.stable_actives_neurons)) and (layer < self.K or self.LAST_LAYER) and self.MATRIX_BY_LAYERS
+                decomposed_in_front_and_back_matrix = (not ((layer,neuron) in self.stable_actives_neurons)) and (layer < self.K or self.LAST_LAYER) and self.CHORDAL_DECOMPOSITION
 
                 constant = self.equivalent_neurons.get_constant(
                     layer=layer, neuron=neuron
@@ -588,7 +588,7 @@ class VariablesCall:
         if (layer, neuron) in self.stable_actives_neurons :
             decomposed_in_front_and_back_matrix = False
         else : 
-            if self.MATRIX_BY_LAYERS :
+            if self.CHORDAL_DECOMPOSITION :
                 if front_of_matrix is None:
                     if layer < self.K-1 :
                         front_of_matrix = True
