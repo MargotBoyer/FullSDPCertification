@@ -43,7 +43,7 @@ models :
     # - [3,4,5,6]
     LAST_LAYER: false
     INPUT_IN_VARIABLES : true
-    use_fusion: true  # Whether to use the fusion API for MOSEK
+    solver: "mosek_fusion"
     use_callback : false # Whether to use the callback for MOSEK
     use_active_neurons: false # Whether to use active neurons in the certification problem as variables
     #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables

@@ -86,7 +86,6 @@ class SDPSolver(Solver):
         BETAS: bool = False,
         BETAS_Z: bool = False,
         ZBAR: bool = False,
-        use_fusion: bool = False,
         solver: str = "mosek_classic",  # "mosek_classic" | "mosek_fusion" | "cvxpy"
         cp_solver: str = "MOSEK",       # backend CVXPY : "MOSEK", "SCS", "CLARABEL", ...
         cp_solver_kwargs: dict = None,
@@ -106,9 +105,6 @@ class SDPSolver(Solver):
         self.create_all_cuts_to_test()
         self.RLT_props = kwargs.get("RLT_props")
 
-        # Résolution use_fusion (ancien param) vs solver (nouveau param)
-        if use_fusion and solver == "mosek_classic":
-            solver = "mosek_fusion"
         self.solver = solver
         self.use_fusion = (solver == "mosek_fusion")
         self.cp_solver = cp_solver

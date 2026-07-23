@@ -32,7 +32,7 @@ models :
     all_combinations_cuts : false
     CHORDAL_DECOMPOSITION: true
     LAST_LAYER: false
-    use_fusion: true  # Whether to use the fusion API for MOSEK
+    solver: "mosek_fusion"
     use_callback : false # Whether to use the callback for MOSEK
     use_active_neurons: true # Whether to use active neurons in the certification problem as variables
     use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables

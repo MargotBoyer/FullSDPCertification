@@ -298,10 +298,15 @@ class CommonConstraints(VariablesCall):
                 "dual_value": None,
                 "label": label,
                 "is_quadratic": False,
+                "not_in_miqcr": False,
             }
         )
         # print(f"Creating new constraint {self.current_num_constraint} : {name}")
         return False
+
+    def mark_current_not_in_miqcr(self):
+        """Marque la contrainte courante comme redondante pour MIQCR (déjà générée en interne)."""
+        self.list_cstr[self.current_num_constraint]["not_in_miqcr"] = True
 
     def first_term_equal_zero(self, num_matrices):
         """
@@ -321,6 +326,7 @@ class CommonConstraints(VariablesCall):
                 label="same_for_data",
             ):
                 continue
+            self.mark_current_not_in_miqcr()
             # print(f"Adding constraint matrix {name_matrix}[1]=0")
             self.list_cstr[self.current_num_constraint]["elements"].add(
                 i=0, j=0, num_matrix=num_matrix, value=1.0

@@ -61,6 +61,7 @@ def quad_bounds(self):
                 f"z_{k,j}^2 - (U+L) z_{k,j} + UL <= 0", label = "same_for_data"
             ):
                 continue
+            self.handler.Constraints.mark_current_not_in_miqcr()
             front_of_matrix = (
                 True
                 if (
@@ -102,6 +103,7 @@ def quad_bounds(self):
             f"zbar - (max(U_{self.K}+ max(L_{self.K})) zbar + (max(U_{self.K} * max(L_{self.K})) <= 0"
         ):
             return
+        self.handler.Constraints.mark_current_not_in_miqcr()
         self.handler.Constraints.add_quad_variable(
             var1="zbar",
             var2="zbar",

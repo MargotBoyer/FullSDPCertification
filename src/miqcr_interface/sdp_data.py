@@ -10,12 +10,16 @@ Flux attendu :
 
     data = extract_miqcr_data(solver.handler)
     result = run_miqcr_sdp_phase(data)   # → betas
+
+Hypothèse : pas de décomposition chordale (CHORDAL_DECOMPOSITION=False),
+donc une seule matrice SDP (index 0). La variable à la position k dans la
+matrice (1-based) a l'index plat k-1 (0-based) dans les vecteurs MIQCR.
 """
 from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import List, Tuple, Dict
+from typing import List
 
 try:
     import mosek
@@ -62,102 +66,41 @@ class MiqcrResult:
 
 
 # ---------------------------------------------------------------------------
-# Construction de la bijection (num_matrix, local_idx) ↔ flat_idx
-# ---------------------------------------------------------------------------
-
-def _build_var_map(indexes) -> Tuple[List, Dict, np.ndarray, np.ndarray]:
-    """
-    Construit l'ordre canonique plat des variables SDP et la table de correspondance.
-
-    Retourne
-    --------
-    flat_order : list of (layer, neuron)
-        Liste ordonnée des variables actives (couche 0 → K, neurones actifs).
-    var_map : dict  (num_matrix: int, local_idx: int) → flat_idx
-        Pour chaque représentation matrice/indice, l'index plat MIQCR.
-    u_flat, l_flat : np.ndarray  shape (n_vars,)
-        Bornes dans l'ordre plat.
-    """
-    K = indexes.K
-    n = indexes.n
-
-    # --- Ordre canonique : couches 0..K, neurones actifs seulement ---
-    flat_order = []
-    last_layer = K if indexes.LAST_LAYER else K - 1
-
-    for layer in range(last_layer + 1):
-        for j in range(n[layer]):
-            # Exclure neurones inactifs stables
-            if (layer, j) in indexes.stable_inactives_neurons:
-                continue
-            # Exclure neurones actifs stables (sauf avant-dernière couche gardée)
-            if (layer, j) in indexes.stable_actives_neurons:
-                if not (indexes.keep_penultimate_actives and layer == K - 1):
-                    continue
-            # Couche d'entrée : exclure les neurones prunés
-            if layer == 0 and hasattr(indexes, 'pruned_input_neurons'):
-                if j in indexes.pruned_input_neurons:
-                    continue
-            # Couche de sortie (LAST_LAYER) : garder seulement ytrue et ytargets
-            if layer == K and indexes.LAST_LAYER:
-                if j != indexes.ytrue and j not in indexes.ytargets:
-                    continue
-            flat_order.append((layer, j))
-
-    n_vars = len(flat_order)
-    flat_idx_of = {(layer, j): fi for fi, (layer, j) in enumerate(flat_order)}
-
-    # --- Table (num_matrix, local_idx) → flat_idx ---
-    var_map: Dict[Tuple[int, int], int] = {}
-
-    for (layer, j), fi in flat_idx_of.items():
-        # Une variable peut avoir jusqu'à 2 représentations (front/back)
-        for fom in (True, False):
-            try:
-                mat = indexes.index_matrix_z(layer, front_of_matrix=fom)
-                loc = indexes.index_variable_z(layer, j, front_of_matrix=fom)
-                var_map[(mat, loc)] = fi
-            except (ValueError, AssertionError):
-                pass
-
-    # --- Bornes ---
-    # L et U sont indexés par (layer)[neuron] dans le handler
-    # On les récupère via indexes (pas directement disponibles ici)
-    # → ces tableaux sont remplis dans extract_miqcr_data()
-    return flat_order, flat_idx_of, var_map, n_vars
-
-
-# ---------------------------------------------------------------------------
 # Conversion d'une contrainte Mosek → entrée MIQCR
+#
+# Les indices i, j issus du handler mosek_classic sont déjà homogénéisés
+# (1-based : 0 = coordonnée homogène, 1..n = variables). Les valeurs
+# off-diagonales sont déjà divisées par 2 par add_dict_quad_to_elements
+# et add_dict_linear_to_elements (dividing_non_diag=True). On les place
+# directement dans la matrice MIQCR sans conversion supplémentaire.
 # ---------------------------------------------------------------------------
 
-
-def _add_quad_entry(mat, flat_i: int, flat_j: int, val: float, sign: float = 1.0):
-    """Ajoute val (avec signe) à la position (flat_i, flat_j) du tenseur MIQCR 3D."""
-    fi, fj = flat_i + 1, flat_j + 1  # +1 pour l'index homogénéisé (0 = constante)
-    if flat_i == flat_j:
-        mat[fi, fj] += sign * val
-    else:
-        mat[fi, fj] += sign * val / 2
-        mat[fj, fi] += sign * val / 2
+def _add_quad_entry(mat, i: int, j: int, val: float, sign: float = 1.0):
+    """i, j : indices homogénéisés 1-based. val : déjà /2 pour i≠j (mosek_classic)."""
+    mat[i, j] += sign * val
+    if i != j:
+        mat[j, i] += sign * val
 
 
-def _add_lin_entry(mat, flat_j: int, val: float, sign: float = 1.0):
-    """Ajoute un terme linéaire dans la matrice homogénéisée (ligne/col 0)."""
-    fj = flat_j + 1
-    mat[0, fj] += sign * val / 2
-    mat[fj, 0] += sign * val / 2
+def _add_lin_entry(mat, i: int, val: float, sign: float = 1.0):
+    """i : indice homogénéisé 1-based. val : déjà /2 (mosek_classic)."""
+    mat[0, i] += sign * val
+    mat[i, 0] += sign * val
 
 
 def _build_cstr_matrix(
     n_vars: int,
     nm_arr, i_arr, j_arr, v_arr,
     constant: float,
-    var_map: Dict,
     sign: float = 1.0,
 ) -> np.ndarray:
     """
     Construit la matrice (n+1)×(n+1) d'une contrainte quadratique MIQCR.
+
+    Convention de stockage dans list_cstr (mosek_classic) :
+      - termes linéaires  : i = index_variable (≥1, homogénéisé), j = 0
+      - termes quadratiques : i ≥ j ≥ 1 (homogénéisés), valeurs déjà /2 pour i≠j
+      - entrée constante    : i = 0, j = 0  (ignorée ici)
 
     sign = +1 pour ≤ / = ,  sign = -1 pour ≥ (négatif → flip en ≤ -lb)
     """
@@ -165,24 +108,20 @@ def _build_cstr_matrix(
     M[0, 0] = sign * constant
 
     for k in range(len(nm_arr)):
-        nm = int(nm_arr[k])
-        i  = int(i_arr[k])
-        j  = int(j_arr[k])
-        v  = float(v_arr[k])
+        i = int(i_arr[k])
+        j = int(j_arr[k])
+        v = float(v_arr[k])
 
         if i == 0:
-            # Terme linéaire : X[nm][0, j] = z_j
-            fj = var_map.get((nm, j))
-            if fj is None:
-                continue
-            _add_lin_entry(M, fj, v, sign)
+            # (0, j) : constant si j=0, linéaire si j>0
+            if j > 0:
+                _add_lin_entry(M, j, v, sign)
+        elif j == 0:
+            # Terme linéaire stocké en (i, 0) : z_i * 1
+            _add_lin_entry(M, i, v, sign)
         else:
-            # Terme quadratique : X[nm][i, j] = z_i * z_j
-            fi = var_map.get((nm, i))
-            fj = var_map.get((nm, j))
-            if fi is None or fj is None:
-                continue
-            _add_quad_entry(M, fi, fj, v, sign)
+            # Terme quadratique : z_i * z_j
+            _add_quad_entry(M, i, j, v, sign)
 
     return M
 
@@ -190,18 +129,19 @@ def _build_cstr_matrix(
 def _build_lin_row(
     n_vars: int,
     nm_arr, i_arr, j_arr, v_arr,
-    var_map: Dict,
     sign: float = 1.0,
 ) -> np.ndarray:
-    """Construit une ligne (n,) pour une contrainte linéaire."""
+    """Construit une ligne (n,) pour une contrainte linéaire.
+    Convertit les indices homogénéisés 1-based en indices 0-based du vecteur."""
     row = np.zeros(n_vars)
     for k in range(len(nm_arr)):
-        nm = int(nm_arr[k])
-        j  = int(j_arr[k])   # i est toujours 0 ici
-        v  = float(v_arr[k])
-        fj = var_map.get((nm, j))
-        if fj is not None:
-            row[fj] += sign * v
+        i = int(i_arr[k])
+        j = int(j_arr[k])
+        v = float(v_arr[k])
+        if j == 0 and i > 0:
+            row[i - 1] += sign * v
+        elif i == 0 and j > 0:
+            row[j - 1] += sign * v
     return row
 
 
@@ -222,19 +162,30 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
     ----------
     handler : MosekClassicHandler (ou compatible)
         Le handler dont on extrait le modèle.
+        Doit avoir CHORDAL_DECOMPOSITION=False (une seule matrice SDP).
     max_quad_constraints : int | None
         Nombre maximum de contraintes quadratiques (mq + pq) à passer à MIQCR.
-        Chaque contrainte quadratique exige une matrice dense (n+1)×(n+1) ;
-        pour les grands réseaux cela sature la mémoire très vite.
         None → auto-limite à ~1 Go de matrices.
-        0   → aucune contrainte quadratique (utile pour valider le pipeline).
+        0   → aucune contrainte quadratique.
 
     Retourne
     --------
     MiqcrData avec toutes les matrices prêtes à passer au C.
     """
+    from solve.sdp_solve.handler.mosek_classic import MosekClassicHandler
+    assert isinstance(handler, MosekClassicHandler), (
+        "extract_miqcr_data requiert le solveur 'mosek_classic' "
+        "(YAML : solver: \"mosek_classic\"). "
+        f"Handler reçu : {type(handler).__name__}"
+    )
+
     indexes = handler.indexes_matrices
-    flat_order, flat_idx_of, var_map, n_vars = _build_var_map(indexes)
+
+    # n_vars = taille de la matrice SDP unique - 1 (coordonnée homogène)
+    n_vars = indexes.get_shape_matrix(0) - 1
+
+    # flat_order : liste ordonnée des variables actives (pour sérialisation)
+    flat_order = _build_flat_order(indexes)
 
     # --- Estimation mémoire et calcul de la limite ---
     list_cstr = handler.Constraints.list_cstr
@@ -272,13 +223,13 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
                 f"  min={arr.min():.4g}  max={arr.max():.4g}  mean={arr.mean():.4g}")
 
     # --- Bornes u, l ---
+    # La variable à la position k dans la matrice (1-based) a l'index plat k-1.
+    # On itère les variables actives et on utilise index_variable_z pour obtenir k.
     u_flat = np.zeros(n_vars)
     l_flat = np.zeros(n_vars)
     L = handler.Constraints.L
     U = handler.Constraints.U
-    for (layer, j), fi in flat_idx_of.items():
-        u_flat[fi] = float(U[layer][j])
-        l_flat[fi] = float(L[layer][j])
+    _fill_bounds(indexes, u_flat, l_flat, U, L)
 
     print(f"[MIQCR] u  : {_arr_info(u_flat)}")
     print(f"[MIQCR] l  : {_arr_info(l_flat)}")
@@ -295,27 +246,27 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
     v_obj  = handler.Objective.value
 
     for k in range(len(nm_obj)):
-        nm = int(nm_obj[k])
-        i  = int(i_obj[k])
-        j  = int(j_obj[k])
-        v  = float(v_obj[k])
-        print(f"[MIQCR] Objectif : k={k}  nm={nm}  i={i}  j={j}  v={v:.4g}")
+        i = int(i_obj[k])
+        j = int(j_obj[k])
+        v = float(v_obj[k])
+        print(f"[MIQCR] Objectif : k={k}  i={i}  j={j}  v={v:.4g}")
 
+        # i, j : indices homogénéisés 1-based (0 = constante)
         if i == 0:
-            fj = var_map.get((nm, j))
-            print("fj :", fj)
-            if fj is not None:
-                c[fj] += v
+            if j > 0:
+                print("c[j-1] :", j - 1)
+                c[j - 1] += v
+        elif j == 0:
+            print("c[i-1] :", i - 1)
+            c[i - 1] += v
         else:
-            fi = var_map.get((nm, i))
-            fj = var_map.get((nm, j))
+            fi, fj = i - 1, j - 1
             print("fi : ", fi, "  fj :", fj)
-            if fi is not None and fj is not None:
-                if fi == fj:
-                    Q[fi, fj] += v
-                else:
-                    Q[fi, fj] += v / 2
-                    Q[fj, fi] += v / 2
+            if fi == fj:
+                Q[fi, fj] += v
+            else:
+                Q[fi, fj] += v   # déjà /2 par add_dict_quad_to_elements
+                Q[fj, fi] += v
 
     print(f"[MIQCR] Q  : {_arr_info(Q)}  (constante obj={cons_obj:.4g})")
     print("[MIQCR Q  = ", Q)
@@ -331,6 +282,8 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
     n_quad_kept = 0
 
     for cstr in list_cstr:
+        if cstr.get("not_in_miqcr", False):
+            continue
         print("\n [extract_miqcr_data] = ", cstr['name'])
         nm_arr = cstr["num_matrix"]
         i_arr  = cstr["i"]
@@ -345,7 +298,7 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
         print(f"[extract_miqcr_data] Contrainte {'linéaire' if linear else 'quadratique'} ")
 
         if linear:
-            row = _build_lin_row(n_vars, nm_arr, i_arr, j_arr, v_arr, var_map)
+            row = _build_lin_row(n_vars, nm_arr, i_arr, j_arr, v_arr)
             print('[extract_miqcr_data] row : ', row)
 
             if bound_type == mosek.boundkey.fx:
@@ -360,67 +313,47 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
 
             elif bound_type == mosek.boundkey.lo:
                 print('[extract_miqcr_data] Contrainte linéaire d\'inégalité (borne inférieure)')
-                # sum ≥ lb → -sum ≤ -(lb - constant)
                 lin_ineq_rows.append(-row)
                 lin_ineq_rhs.append(constant - lb)
 
             elif bound_type == mosek.boundkey.ra:
                 print('[extract_miqcr_data] Contrainte linéaire double borne')
-                # lb ≤ sum ≤ ub → deux inégalités
                 lin_ineq_rows.append(row)
                 lin_ineq_rhs.append(ub - constant)
                 lin_ineq_rows.append(-row)
                 lin_ineq_rhs.append(constant - lb)
 
         else:
-            #print('[extract_miqcr_data] Contrainte quadratique')
-            # Contrainte quadratique : vérifier le budget avant d'allouer
             if n_quad_kept >= max_quad_constraints:
-                #print("[extract_miqcr_data] Limite de contraintes quadratiques atteinte, ")
                 continue
             n_quad_kept += 1
 
             if bound_type == mosek.boundkey.fx:
-                #print('[extract_miqcr_data] Contrainte quadratique d\'égalité')
-                M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
-                                        constant, var_map, sign=1.0)
-                #print("[extract_miqcr_data] Matrice quadratique :\n", M)
+                M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr, constant, sign=1.0)
                 quad_eq_mats.append(M)
                 quad_eq_rhs.append(lb)
 
             elif bound_type == mosek.boundkey.up:
-                #print('[extract_miqcr_data] Contrainte quadratique d\'inégalité')
-                M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
-                                        constant, var_map, sign=1.0)
-                #print("[extract_miqcr_data] Matrice quadratique :\n", M)
+                M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr, constant, sign=1.0)
                 quad_ineq_mats.append(M)
                 quad_ineq_rhs.append(ub)
 
             elif bound_type == mosek.boundkey.lo:
-                #print('[extract_miqcr_data] Contrainte quadratique d\'inégalité (borne inférieure)')
-                # sum ≥ lb → -sum ≤ -lb  (on négative la matrice et le constant)
-                M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
-                                        constant, var_map, sign=-1.0)
-                #print("[extract_miqcr_data] Matrice quadratique :\n", M)
+                M = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr, constant, sign=-1.0)
                 quad_ineq_mats.append(M)
                 quad_ineq_rhs.append(-lb)
 
             elif bound_type == mosek.boundkey.ra:
-                #print('[extract_miqcr_data] Contrainte quadratique double borne')
-                M_up = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
-                                           constant, var_map, sign=1.0)
-                #print("[extract_miqcr_data] Matrice quadratique (borne sup) :\n", M_up)
+                M_up = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr, constant, sign=1.0)
                 quad_ineq_mats.append(M_up)
                 quad_ineq_rhs.append(ub)
-                M_lo = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr,
-                                           constant, var_map, sign=-1.0)
-                #print("[extract_miqcr_data] Matrice quadratique (borne inf) :\n", M_lo)
+                M_lo = _build_cstr_matrix(n_vars, nm_arr, i_arr, j_arr, v_arr, constant, sign=-1.0)
                 quad_ineq_mats.append(M_lo)
                 quad_ineq_rhs.append(-lb)
-                # ra compte pour 2 dans le budget
                 n_quad_kept += 1
-            else : 
+            else:
                 raise ValueError(f"Type de borne inconnu : {bound_type}")
+
     # --- Assemblage final ---
     m  = len(lin_eq_rows)
     p  = len(lin_ineq_rows)
@@ -462,3 +395,56 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
         cons=cons_obj,
         flat_order=flat_order,
     )
+
+
+# ---------------------------------------------------------------------------
+# Helpers internes
+# ---------------------------------------------------------------------------
+
+def _build_flat_order(indexes) -> list:
+    """Retourne la liste ordonnée (layer, neuron) des variables actives."""
+    K = indexes.K
+    n = indexes.n
+    last_layer = K if indexes.LAST_LAYER else K - 1
+    flat_order = []
+    for layer in range(last_layer + 1):
+        for j in range(n[layer]):
+            if (layer, j) in indexes.stable_inactives_neurons:
+                continue
+            if (layer, j) in indexes.stable_actives_neurons:
+                if not (indexes.keep_penultimate_actives and layer == K - 1):
+                    continue
+            if layer == 0 and hasattr(indexes, 'pruned_input_neurons'):
+                if j in indexes.pruned_input_neurons:
+                    continue
+            if layer == K and indexes.LAST_LAYER:
+                if j != indexes.ytrue and j not in indexes.ytargets:
+                    continue
+            flat_order.append((layer, j))
+    return flat_order
+
+
+def _fill_bounds(indexes, u_flat: np.ndarray, l_flat: np.ndarray, U, L) -> None:
+    """Remplit les tableaux de bornes via index_variable_z."""
+    K = indexes.K
+    n = indexes.n
+    last_layer = K if indexes.LAST_LAYER else K - 1
+    for layer in range(last_layer + 1):
+        for j in range(n[layer]):
+            if (layer, j) in indexes.stable_inactives_neurons:
+                continue
+            if (layer, j) in indexes.stable_actives_neurons:
+                if not (indexes.keep_penultimate_actives and layer == K - 1):
+                    continue
+            if layer == 0 and hasattr(indexes, 'pruned_input_neurons'):
+                if j in indexes.pruned_input_neurons:
+                    continue
+            if layer == K and indexes.LAST_LAYER:
+                if j != indexes.ytrue and j not in indexes.ytargets:
+                    continue
+            try:
+                fi = indexes.index_variable_z(layer, j, front_of_matrix=False) - 1
+                u_flat[fi] = float(U[layer][j])
+                l_flat[fi] = float(L[layer][j])
+            except (ValueError, AssertionError):
+                pass

@@ -23,58 +23,58 @@ network :
   - 3
 
 models :
-  - certification_model_type : "UntargetedSDP"
-    write_model: true
-    solveur: "mosek_fusion"
-    cp_solver : "SCS"
-    cuts : 
-    # - "RLT"
-    # - "triangularization"
-    # - "McCormick_beta_z"
-    # - "beta_logits_comparaison"
-    # - "beta_logits_comparaison_big_M"
-    # - "sum_beta_logits_equal_logit"
-    RLT_props : 
-    - 1.
-    all_combinations_cuts : false
-    CHORDAL_DECOMPOSITION: false
-    # - [0,1]
-    # - [1,2,3]
-    # - [3,4,5,6]
-    LAST_LAYER: false
-    INPUT_IN_VARIABLES : true
-    use_fusion: true  # Whether to use the fusion API for MOSEK
-    use_callback : false # Whether to use the callback for MOSEK
-    use_active_neurons: true # Whether to use active neurons in the certification problem as variables
-    #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables
-    use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
-    keep_penultimate_actives : true # Whether to keep the penultimate layer active neurons in the certification problem
-    bounds_file: "data/bounds/blob_4x10-0.5_linf.csv"  # Folder where precomputed bounds are stored
-    bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
-    bounds_n_runs : 10 # Number of runs to compute bounds, useful when the method is non-deterministic (e.g., alpha-CROWN with random alpha initialization)
-   # solver_time_limit : 10 # Time limit for MOSEK in seconds, set to None for no limit
-  
-  # # SDPt
-  # - certification_model_type : "TargetedSDP"
-  #   solver: "mosek_fusion"
-  #   # cp_solver: "SCS"
-  #   # cp_solver_kwargs:
-  #   # eps: 1.0e-4
-  #   # max_iters: 50000
+  # - certification_model_type : "UntargetedSDP"
+  #   write_model: true
+  #   # cp_solver : "SCS"
   #   cuts : 
-  #   - "RLT"
-  #   - "triangularization"
+  #   # - "RLT"
+  #   # - "triangularization"
+  #   # - "McCormick_beta_z"
+  #   # - "beta_logits_comparaison"
+  #   # - "beta_logits_comparaison_big_M"
+  #   # - "sum_beta_logits_equal_logit"
   #   RLT_props : 
-  #   - 0.1
+  #   - 1.
   #   all_combinations_cuts : false
-  #   CHORDAL_DECOMPOSITION: true
+  #   CHORDAL_DECOMPOSITION: false
+  #   # - [0,1]
+  #   # - [1,2,3]
+  #   # - [3,4,5,6]
   #   LAST_LAYER: false
-  #   use_fusion: false  # Whether to use the fusion API for MOSEK
+  #   INPUT_IN_VARIABLES : true
+  #   solver: "mosek_classic"
   #   use_callback : false # Whether to use the callback for MOSEK
   #   use_active_neurons: true # Whether to use active neurons in the certification problem as variables
+  #   #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables
   #   use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
-  #   keep_penultimate_actives : true
-  #   bounds_method: "alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+  #   keep_penultimate_actives : true # Whether to keep the penultimate layer active neurons in the certification problem
+  #   bounds_file: "data/bounds/blob_4x10-0.5_linf.csv"  # Folder where precomputed bounds are stored
+  #   bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+  #   bounds_n_runs : 10 # Number of runs to compute bounds, useful when the method is non-deterministic (e.g., alpha-CROWN with random alpha initialization)
+  #  # solver_time_limit : 10 # Time limit for MOSEK in seconds, set to None for no limit
+  
+  # SDPt
+  - certification_model_type : "TargetedSDP"
+    solver: "mosek_classic"
+    # cp_solver: "SCS"
+    # cp_solver_kwargs:
+    # eps: 1.0e-4
+    # max_iters: 50000
+    cuts : 
+    # - "RLT"
+    - "triangularization"
+    RLT_props : 
+    - 0.1
+    all_combinations_cuts : false
+    CHORDAL_DECOMPOSITION: false
+    LAST_LAYER: false
+    use_fusion: false  # Whether to use the fusion API for MOSEK
+    use_callback : false # Whether to use the callback for MOSEK
+    use_active_neurons: true # Whether to use active neurons in the certification problem as variables
+    use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
+    keep_penultimate_actives : true
+    bounds_method: "from_file"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+    bounds_file : "data/bounds/blob_4x10-1_linf.csv"  # Folder where precomputed bounds are stored
 
 
 
