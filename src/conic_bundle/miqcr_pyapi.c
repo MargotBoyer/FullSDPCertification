@@ -67,6 +67,13 @@ typedef void (*sdp_solver_cb_t)(
 /* Définition du pointeur global (extern dans solver_sdp_mixed.c) */
 sdp_solver_cb_t _sdp_solve_cb = NULL;
 
+/* Compteur d'itérations Conic Bundle (incrémenté dans __wrap_run_sdp_solver_mixed_mosek) */
+static int _cb_iter_count = 0;
+
+/* Buffer global : copie du triangle inférieur de X* à la dernière itération CB */
+static double *_last_x_buf = NULL;
+static int     _last_x_len = 0;
+
 /**
  * miqcr_register_sdp_solver — enregistre un callback Python comme solveur SDP.
  *
@@ -102,11 +109,11 @@ void miqcr_register_sdp_solver(sdp_solver_cb_t cb)
 /* ---------------------------------------------------------------------- */
 /* Interception de run_sdp_solver_mixed_mosek via --wrap du linker         */
 /*                                                                          */
-/* Le flag -Wl,--wrap=run_sdp_solver_mixed_mosek dans Makefile.pyapi fait  */
-/* que tout appel à run_sdp_solver_mixed_mosek() est redirigé ici.         */
-/* __real_run_sdp_solver_mixed_mosek() pointe vers l'implémentation Mosek  */
-/* dans solver_sdp_mixed.o (appelée uniquement si aucun callback n'est     */
-/* enregistré).                                                             */
+/* Avec -fPIC, les appels à run_sdp_solver_mixed_mosek dans                */
+/* solver_sdp_mixed.c génèrent des relocations R_X86_64_PLT32 même pour   */
+/* un appel intra-fichier. --wrap=run_sdp_solver_mixed_mosek les intercept */
+/* tous → _cb_iter_count comptabilise les itérations CB dans les deux cas  */
+/* (solveur Mosek interne ou callback Python enregistré).                  */
 /* ---------------------------------------------------------------------- */
 
 /* Déclaration de la version originale Mosek (résolue par le linker) */
@@ -120,13 +127,14 @@ extern void dualized_objective_function(SDP psdp,
 
 void __wrap_run_sdp_solver_mixed_mosek(double **x)
 {
+    _cb_iter_count++;
     if (_sdp_solve_cb == NULL) {
-        /* Aucun solveur externe : on délègue à Mosek */
+        /* Aucun solveur externe : délègue à Mosek sans modifier l'état CB */
         __real_run_sdp_solver_mixed_mosek(x);
         return;
     }
 
-    /* Calcule la matrice objectif dualisée à partir des betas courants */
+    /* Chemin callback Python */
     double *q_beta = NULL;
     double *c_beta = NULL;
     double  l_beta = 0.0;
@@ -135,15 +143,12 @@ void __wrap_run_sdp_solver_mixed_mosek(double **x)
     int n   = psdp->n;
     int mq  = psdp->mq;
     int pq  = psdp->pq;
-    int len = (n + 1) * (n + 2) / 2;
 
-    /* Alloue les buffers de sortie */
     double *beta_diag_buf  = alloc_vector_d(n);
     double *alphaq_buf     = alloc_vector_d(mq > 0 ? mq : 1);
     double *alphabisq_buf  = alloc_vector_d(pq > 0 ? pq : 1);
     double  sol_out        = 0.0;
 
-    /* Appelle le solveur Python */
     _sdp_solve_cb(n, mq, pq,
                   q_beta, c_beta, l_beta,
                   x[0],
@@ -152,7 +157,6 @@ void __wrap_run_sdp_solver_mixed_mosek(double **x)
                   alphabisq_buf,
                   &sol_out);
 
-    /* Écrit les résultats dans psdp (attendus par eval_fun_mixed) */
     psdp->beta_diag  = beta_diag_buf;
     if (mq > 0) psdp->alphaq    = alphaq_buf;
     if (pq > 0) psdp->alphabisq = alphabisq_buf;
@@ -160,6 +164,19 @@ void __wrap_run_sdp_solver_mixed_mosek(double **x)
 
     free(q_beta);
     free(c_beta);
+
+    /* Sauvegarde X* (triangle inférieur) — uniquement dans le chemin callback */
+    {
+        int len = (n + 1) * (n + 2) / 2;
+        if (_last_x_len != len) {
+            free(_last_x_buf);
+            _last_x_buf = (double *)malloc((size_t)len * sizeof(double));
+            _last_x_len = len;
+        }
+        if (_last_x_buf != NULL && x[0] != NULL) {
+            memcpy(_last_x_buf, x[0], (size_t)len * sizeof(double));
+        }
+    }
 }
 
 /* Variables B&B non utilisées en mode SDP-only, mais déclarées pour l'édition */
@@ -258,6 +275,8 @@ void miqcr_populate_qp(
      * On les initialise à NULL pour que free(NULL) soit un no-op légal. */
     qp->lg  = NULL;
     qp->lgc = NULL;
+    _cb_iter_count = 0;
+    _last_x_len    = 0;   /* invalide le buffer X* du run précédent */
 
     /* Dimensions */
     qp->n      = n;
@@ -438,4 +457,86 @@ void miqcr_set_param(const char *name, double value)
         fprintf(stderr, "[miqcr_pyapi] Paramètre inconnu : %s\n", name);
 
     printf("[miqcr_pyapi] Paramètre %s = %g\n", name, value);
+}
+
+
+/**
+ * miqcr_get_nb_iter — retourne le nombre d'itérations Conic Bundle de la dernière exécution.
+ *
+ * Chaque appel à run_sdp_solver_mixed_mosek (intercepté via --wrap) correspond
+ * à une itération CB, que le solveur SDP soit Mosek ou Python.
+ */
+int miqcr_get_nb_iter(void)
+{
+    return _cb_iter_count;
+}
+
+
+/**
+ * miqcr_get_final_x — copie le triangle inférieur de la matrice SDP finale X*
+ * dans le buffer out_x (de taille (n+1)(n+2)/2, alloué par Python).
+ *
+ * À appeler après miqcr_compute_betas(). Le format est le triangle inférieur
+ * row-major : out_x[r*(r+1)/2 + c] = X[r,c] pour r >= c (taille n+1).
+ */
+void miqcr_get_final_x(double *out_x)
+{
+    if (qp == NULL) {
+        fprintf(stderr, "[miqcr_pyapi] miqcr_get_final_x: non initialisé\n");
+        return;
+    }
+    int n   = qp->n;
+    int len = (n + 1) * (n + 2) / 2;
+    if (_last_x_buf != NULL && _last_x_len == len) {
+        memcpy(out_x, _last_x_buf, (size_t)len * sizeof(double));
+    } else {
+        fprintf(stderr, "[miqcr_pyapi] miqcr_get_final_x: aucune solution SDP disponible\n");
+        memset(out_x, 0, (size_t)len * sizeof(double));
+    }
+}
+
+
+/**
+ * miqcr_get_true_obj — évalue le vrai objectif (non pénalisé) sur X* final.
+ *
+ * MIQCR stocke psdp->q = -Q_orig et psdp->c = -c_orig (convention interne de
+ * dualization, cf. dualized_objective_function dans utilities.c). La valeur
+ * vraie est donc :
+ *   true_obj = <Q_orig, X*[1:,1:]> + <c_orig, X*[1:,0]> + cons
+ *            = -<psdp->q, X*[1:,1:]> - <psdp->c, X*[1:,0]> + psdp->cons
+ *
+ * make_matrix_with_vector() reconstruit X* depuis l'état interne de psdp
+ * (valide après miqcr_compute_betas). Retourne 0.0 si non initialisé.
+ */
+extern void make_matrix_with_vector(SDP psdp, double **matrix);
+
+double miqcr_get_true_obj(void)
+{
+    if (qp == NULL || psdp == NULL) {
+        fprintf(stderr, "[miqcr_pyapi] miqcr_get_true_obj: non initialisé\n");
+        return 0.0;
+    }
+    int n = qp->n;
+    double *matrix = NULL;
+    make_matrix_with_vector(psdp, &matrix);
+    if (matrix == NULL) {
+        fprintf(stderr, "[miqcr_pyapi] miqcr_get_true_obj: make_matrix_with_vector a retourné NULL\n");
+        return 0.0;
+    }
+
+    double val = 0.0;
+    int i, j;
+    /* <Q_orig, X*[1:,1:]> = -<psdp->q, X*[1:,1:]> */
+    for (i = 0; i < n; i++)
+        for (j = 0; j < n; j++)
+            val -= psdp->q[ij2k(i, j, n)] * matrix[ij2k(i + 1, j + 1, n + 1)];
+    /* <c_orig, X*[1:,0]> = -<psdp->c, X*[1:,0]> */
+    for (i = 0; i < n; i++)
+        val -= psdp->c[i] * matrix[ij2k(0, i + 1, n + 1)];
+    /* + cons */
+    val += psdp->cons;
+
+    free_vector_d(matrix);
+    printf("[miqcr_pyapi] miqcr_get_true_obj = %g\n", val);
+    return val;
 }

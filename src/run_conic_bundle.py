@@ -208,8 +208,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     network = network.to(device)
 
-    # Enregistre le callback Python une seule fois (réutilisé à chaque itération)
-    register_sdp_solver(trivial_sdp_callback)
+    # register_sdp_solver(trivial_sdp_callback)  # placeholder — désactivé pour utiliser Mosek interne MIQCR
 
     title = f"{validated.network.name}-{epsilon}"
     launch_date = datetime.datetime.now().strftime("%Y_%m_%d_%Hh%M_%Ss")
@@ -307,7 +306,7 @@ def main():
             result = run_miqcr_sdp_phase(data)
             t_cb = time.time() - t1
 
-            print(f"    Conic Bundle terminée en {t_cb:.2f}s | sol_sdp={result.sol_sdp:.6f}")
+            print(f"    Conic Bundle terminée en {t_cb:.2f}s | LB={result.sol_sdp:.6f} | true_obj(X*)={result.true_obj_sdp:.6f}")
             print(f"    beta max={np.abs(result.beta).max():.4f}")
 
             results.append({
@@ -315,8 +314,10 @@ def main():
                 "label": ytrue.item(),
                 "n_vars": data.n,
                 "sol_sdp": result.sol_sdp,
-                "t_extract_s": round(t_extract, 3),
-                "t_cb_s": round(t_cb, 3),
+                "true_obj_sdp": result.true_obj_sdp,
+                "nb_iter_cb": result.nb_iter_cb,
+                "time_build_miqcr": round(t_extract, 3),
+                "time_conic_bundle": round(t_cb, 3),
             })
             n_processed += 1
 

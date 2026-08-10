@@ -66,6 +66,9 @@ SDP_SOLVER_CB_TYPE = ctypes.CFUNCTYPE(
 # Référence globale pour empêcher le garbage collector de libérer le callback
 _registered_cb_ref = None
 
+# Compteur d'itérations CB côté Python (incrémenté dans _c_callback à chaque appel)
+_nb_iter_cb: int = 0
+
 
 def _setup_signatures(lib: ctypes.CDLL) -> None:
     """Déclare les types d'arguments et de retour des fonctions C exportées."""
@@ -110,6 +113,20 @@ def _setup_signatures(lib: ctypes.CDLL) -> None:
     # void miqcr_register_sdp_solver(sdp_solver_cb_t cb)
     lib.miqcr_register_sdp_solver.restype  = None
     lib.miqcr_register_sdp_solver.argtypes = [SDP_SOLVER_CB_TYPE]
+
+    # int miqcr_get_nb_iter(void)
+    lib.miqcr_get_nb_iter.restype  = ctypes.c_int
+    lib.miqcr_get_nb_iter.argtypes = []
+
+    # void miqcr_get_final_x(double *out_x)
+    # out_x : buffer de taille (n+1)*(n+2)/2, triangle inférieur row-major de X*
+    lib.miqcr_get_final_x.restype  = None
+    lib.miqcr_get_final_x.argtypes = [dbl_p]
+
+    # double miqcr_get_true_obj(void)
+    # Objectif vrai (non pénalisé) évalué sur X* via make_matrix_with_vector interne.
+    lib.miqcr_get_true_obj.restype  = ctypes.c_double
+    lib.miqcr_get_true_obj.argtypes = []
 
 
 def _np_ptr(arr: np.ndarray) -> ctypes.POINTER(ctypes.c_double):
@@ -199,6 +216,8 @@ def run_miqcr_sdp_phase(
     out_alphabisq = np.zeros(max(pq, 1), dtype=np.float64)
     out_sol_sdp   = np.zeros(1,      dtype=np.float64)
 
+    global _nb_iter_cb
+    _nb_iter_cb = 0
     print("[run_miqcr_sdp_phase] Appel miqcr_compute_betas (Conic Bundle)...")
     lib.miqcr_compute_betas(
         ptr(out_beta),
@@ -206,16 +225,31 @@ def run_miqcr_sdp_phase(
         ptr(out_alphabisq),
         ptr(out_sol_sdp),
     )
-    print(f"[run_miqcr_sdp_phase] miqcr_compute_betas terminé — sol_sdp={out_sol_sdp[0]:.6g}")
+    # MIQCR stocke sol_sdp = -LB (convention signe inversé : objectif négativé en interne).
+    # On nie pour obtenir la vraie borne inférieure effective sur le problème original.
+    lb = -float(out_sol_sdp[0])
+    print(f"[run_miqcr_sdp_phase] miqcr_compute_betas terminé — sol_sdp (borne effective) = {lb:.6g}")
 
+    # Objectif vrai (non pénalisé) évalué sur X*, idem convention signe inversé.
+    true_obj = -lib.miqcr_get_true_obj()
+    print(f"[run_miqcr_sdp_phase] true_obj_sdp (objectif non pénalisé sur X*) = {true_obj:.6g}")
+
+    # Priorité au compteur C-side (via --wrap=eval_fun_mixed, marche avec ou
+    # sans callback Python). Fallback sur le compteur Python si C retourne 0.
+    nb_iter = lib.miqcr_get_nb_iter()
+    if nb_iter == 0:
+        nb_iter = _nb_iter_cb
     result = MiqcrResult(
         beta=out_beta.reshape(n, n),
         alphaq=out_alphaq[:mq],
         alphabisq=out_alphabisq[:pq],
-        sol_sdp=float(out_sol_sdp[0]),
+        sol_sdp=lb,
+        true_obj_sdp=true_obj,
+        nb_iter_cb=nb_iter,
     )
     print(f"[run_miqcr_sdp_phase] beta : max={np.abs(result.beta).max():.4g} "
           f"nz={np.count_nonzero(result.beta)}/{n*n}")
+    print(f"[run_miqcr_sdp_phase] itérations CB : {nb_iter}")
     return result
 
 
@@ -259,6 +293,8 @@ def register_sdp_solver(python_solver_fn, so_path: str | None = None) -> None:
     def _c_callback(n, mq, pq,
                     q_beta_p, c_beta_p, l_beta,
                     x_out_p, beta_diag_p, alphaq_p, alphabisq_p, sol_p):
+        global _nb_iter_cb
+        _nb_iter_cb += 1
         # Convertit les pointeurs C en vues numpy (zero-copy)
         len_x = (n + 1) * (n + 2) // 2
 

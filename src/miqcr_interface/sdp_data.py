@@ -62,7 +62,9 @@ class MiqcrResult:
     beta: np.ndarray           # (n, n) multiplicateurs finaux β_{ij}
     alphaq: np.ndarray         # (mq,)  duaux des contraintes Aq
     alphabisq: np.ndarray      # (pq,)  duaux des contraintes Dq
-    sol_sdp: float             # valeur objectif SDP à convergence
+    sol_sdp: float             # valeur objectif SDP pénalisée par β à convergence
+    true_obj_sdp: float        # valeur du vrai objectif (non pénalisé) évalué sur X*
+    nb_iter_cb: int = 0        # nombre d'itérations Conic Bundle
 
 
 # ---------------------------------------------------------------------------

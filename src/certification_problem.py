@@ -472,6 +472,7 @@ def _run_orchestrator(certif_problem, network, title_run_full):
             network, title_run_full,
             "--start", str(chunk_start),
             "--end", str(chunk_end),
+            "--worker",
         ]
         if saved_config and os.path.exists(saved_config):
             cmd += ["--config", saved_config]
@@ -483,20 +484,18 @@ def _run_orchestrator(certif_problem, network, title_run_full):
     print(f"All chunks done. Exit codes: {exit_codes}")
 
 
-def main(network: str, title_run: str, start: int = None, end: int = None, config_path: str = None, include_indices: set = None):
+def main(network: str, title_run: str, start: int = None, end: int = None, config_path: str = None, include_indices: set = None, is_worker: bool = False):
     yaml_file = f"{network}.yaml"
     certif_problem = Certification_Problem.load_from_yaml(yaml_file, config_path=config_path)
 
-    is_worker = start is not None and end is not None
-
     if is_worker:
-        # The orchestrator (or SLURM launcher) already set the date prefix; use as-is.
+        # The orchestrator already set the date prefix in title_run; use as-is.
         title_run_full = title_run
         title_run_for_solve = f"{title_run_full}/part_{start}_{end}"
     else:
         launch_date = datetime.datetime.now().strftime("%Y_%m_%d_%Hh%M_%Ss")
         title_run_full = f"{launch_date}_{title_run}"
-        title_run_for_solve = title_run_full
+        title_run_for_solve = title_run_full if (start is None and end is None) else f"{title_run_full}/part_{start}_{end}"
 
         if certif_problem.divide_run > 1:
             parent_dir = Path(get_project_path(f"results/benchmark/{certif_problem.title}/{title_run_full}"))
@@ -626,6 +625,8 @@ if __name__ == "__main__":
                         help="Worker mode: full path to yaml config (overrides config/ lookup)")
     parser.add_argument("--indices", type=int, nargs="+", default=None,
                         help="Explicit list of data_indexes to process (e.g. --indices 3 7 42)")
+    parser.add_argument("--worker", action="store_true", default=False,
+                        help="Internal flag: launched as a worker by the orchestrator (date already in title_run)")
     args = parser.parse_args()
 
     print("Number of CPU : ", mp.cpu_count())
@@ -637,6 +638,6 @@ if __name__ == "__main__":
             parser.error("network is required when not using --resume")
         include_indices = set(args.indices) if args.indices else None
         main(network=args.network, title_run=args.title_run, start=args.start, end=args.end,
-             config_path=args.config, include_indices=include_indices)
+             config_path=args.config, include_indices=include_indices, is_worker=args.worker)
 
     
