@@ -187,8 +187,8 @@ class ConicBundleParser(CertificationProblemOneData):
     def to_file(self):
 
         print("class name : ", self.__class__.__name__)
-        if "Lan" in self.__class__.__name__:
-            print("Lan parser ")
+        if "Targeted" in self.__class__.__name__:
+            print("Targeted parser ")
             print("self.ytargets : ", self.ytargets)
             for ytarget in self.ytargets:
                 self.ytarget = ytarget

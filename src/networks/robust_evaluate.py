@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # robust_to_test_dataset = torch.load(
     #     get_project_path(config["evaluate_robustness_path"]), weights_only=False
     # )["dataset"]
-    robust_to_test_dataset = torch.load("/share/homes/boyerma/FastSDPCertification/data/datasets/moon_dataset.pth", weights_only = False)["dataset"]
+    robust_to_test_dataset = torch.load("/share/homes/boyerma/FastSDPCertification/data/datasets/blob_dataset.pth", weights_only = False)["dataset"]
   
     # test_dataset = torch.load(get_project_path(config["test_path"]), weights_only=False)["dataset"]
 

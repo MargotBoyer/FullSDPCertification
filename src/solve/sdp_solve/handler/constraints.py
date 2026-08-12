@@ -1,4 +1,5 @@
 from ast import Set
+from enum import Enum
 from fastsdp_tools import exists_two_similar_pairs_in_three_lists, deduct_two_lists
 import logging
 import numpy as np
@@ -19,6 +20,18 @@ from .variable_elements import (
 import matplotlib.pyplot as plt
 
 logger_mosek = logging.getLogger("Mosek_logger")
+
+
+class ConstraintRole(Enum):
+    """Rôle d'une contrainte vis-à-vis de la dynamic conic bundle method (voir
+    task-dynamic-conic-bundle.md, Phase 1). HARD = toujours poussée dans le task
+    MOSEK ; DUALIZABLE = éligible à être retirée du task et repliée dans l'objectif
+    lagrangien (Σ alpha_r · A_r) par DynamicConicBundleSolver. Par défaut HARD :
+    un run SDP classique (sans conic bundle) n'est jamais affecté par ce champ.
+    """
+
+    HARD = "hard"
+    DUALIZABLE = "dualizable"
 
 
 class CommonConstraints(VariablesCall):
@@ -205,6 +218,17 @@ class CommonConstraints(VariablesCall):
             "elements"
         ].decode_key_vec()
 
+        # Après agrégation (decode_key_vec somme les contributions par clé (i,j,num_matrix)),
+        # une entrée peut légitimement retomber exactement à zéro : deux contributions
+        # indépendantes à la même position qui s'annulent numériquement (observé par ex.
+        # dans z_j2_beta_j2_less_than_zj sur un petit réseau — cf. task-dynamic-conic-bundle.md,
+        # investigation "Bug B"). Un coefficient nul est mathématiquement inoffensif (le terme
+        # ne contribue simplement pas), donc on le filtre ici plutôt que de laisser
+        # check_current_constraint() lever une erreur sur un cas parfaitement valide.
+        nonzero = val != 0
+        if not nonzero.all():
+            i, j, num_matrix, val = i[nonzero], j[nonzero], num_matrix[nonzero], val[nonzero]
+
         self.list_cstr[self.current_num_constraint]["i"] = i
         self.list_cstr[self.current_num_constraint]["j"] = j
         self.list_cstr[self.current_num_constraint]["num_matrix"] = num_matrix
@@ -299,6 +323,7 @@ class CommonConstraints(VariablesCall):
                 "label": label,
                 "is_quadratic": False,
                 "not_in_miqcr": False,
+                "role": ConstraintRole.HARD,
             }
         )
         # print(f"Creating new constraint {self.current_num_constraint} : {name}")
@@ -307,6 +332,15 @@ class CommonConstraints(VariablesCall):
     def mark_current_not_in_miqcr(self):
         """Marque la contrainte courante comme redondante pour MIQCR (déjà générée en interne)."""
         self.list_cstr[self.current_num_constraint]["not_in_miqcr"] = True
+
+    def mark_current_dualizable(self):
+        """Marque la contrainte courante comme éligible à la dualisation par la
+        dynamic conic bundle method (cf. src/dynamic_conic_bundle/). N'a aucun effet
+        sur un run SDP classique : la contrainte reste poussée dans le task MOSEK
+        par add_to_task() tant qu'aucun DynamicConicBundleSolver ne la désactive
+        explicitement via resolve_dualized().
+        """
+        self.list_cstr[self.current_num_constraint]["role"] = ConstraintRole.DUALIZABLE
 
     def first_term_equal_zero(self, num_matrices):
         """

@@ -18,7 +18,9 @@ import datetime
 import shutil
 import argparse
 import multiprocessing as mp
+import time
 from adversarial_attacks import PGDAttack
+from dynamic_conic_bundle import DynamicConicBundleSolver
  
 from fastsdp_tools import create_folder_benchmark, get_project_path
 from fastsdp_tools.resume_utils import find_run_yaml, find_processed_indices, load_existing_results, log_run_history
@@ -232,6 +234,7 @@ class Certification_Problem:
 
             dict_infos = dict(solver_config)
             dict_infos.pop("certification_model_type")
+            dict_infos.pop("dynamic_conic_bundle", None)
             logger.debug("dict_infos:", dict_infos)
    
             # model_bounds = solve.LPBoundLayer(
@@ -293,21 +296,26 @@ class Certification_Problem:
             model_instance.solve(verbose=True, only_bounds=False, skip_pairs=skip_pairs)
             logger.debug("Model instance solved")
             logger.debug("model_instance.benchmark_dataframe :", model_instance.benchmark_dataframe)
-            
+
             # for k in range(1, self.network.K + 1):
             #     if k not in coefficient_values:
             #         coefficient_values[k] = []
             #     coefficient_values[k].extend(model_instance.handler.Constraints.coefficient_values[k])
             #print("STUDY COEFF after run: coefficient values for each layer: {}".format(coefficient_values))
+
+            # results.csv est déjà tenu à jour ligne par ligne par _write_presolve_row /
+            # _append_row_to_results_csv / get_results_trivially_solved (get_variables.py,
+            # getting_results.py) — y compris pour les échantillons résolus dans un processus
+            # forké par _run_optimization_isolated. NE PAS réécrire results.csv ici via
+            # self.benchmark : model_instance.benchmark_dataframe reste None côté parent pour
+            # tout échantillon forké (le fork ne propage pas les mutations de l'enfant), donc
+            # self.benchmark n'accumule jamais leurs lignes. Le faire quand même écrasait
+            # results.csv avec un self.benchmark incomplet dès qu'un échantillon trivialement
+            # résolu (non forké) survenait dans le même run, effaçant les lignes déjà écrites
+            # par les échantillons forkés précédents (cf. task-dynamic-conic-bundle.md).
             if model_instance.benchmark_dataframe is not None:
                 self.benchmark = concat_dataframes_with_missing_columns(
                     self.benchmark, model_instance.benchmark_dataframe
-                )
-                self.benchmark.to_csv(
-                    get_project_path(
-                        f"results/benchmark/{self.title}/{title_run}/results.csv"
-                    ),
-                    index=False,
                 )
             dict_stability = {
                             "label": [ytrue],
@@ -390,6 +398,177 @@ class Certification_Problem:
             )
             plt.close()
 
+    def run_conic_bundle(self, solver_config: BaseModel, title_run: str = "", start: int = None, end: int = None, skip_indices: set = None, skip_pairs: set = None, include_indices: set = None) -> None:
+        """
+        Variante de run() qui dualise les contraintes DUALIZABLE (RLT) au lieu de les
+        garder en dur, via DynamicConicBundleSolver (task-dynamic-conic-bundle.md),
+        déclenchée quand `solver_config.dynamic_conic_bundle.enabled` est vrai.
+
+        Ne réutilise pas le pipeline complet de run() (isolation par fork,
+        _write_presolve_row, get_results()) : ce chemin est expérimental (Phase 2),
+        écrit son propre results.csv (schéma volontairement plus simple — pas
+        Nb_constraints/dual_obj_value/etc.) dans le même dossier. `cuts_to_test` /
+        `RLT_props` ne sont pas parcourus : seule la première combinaison de coupes
+        et le premier RLT_prop du modèle sont utilisés (la dualisation rend la
+        proportion RLT pré-calculée moins pertinente — on dualise tout ce qui est
+        tagué DUALIZABLE, cf. `dynamic_conic_bundle.dualize`).
+        """
+        model_class = getattr(solve, solver_config.certification_model_type)
+        cb_config = solver_config.dynamic_conic_bundle
+        print(f"Running conic bundle certification with solver: {solver_config.certification_model_type} "
+              f"(dynamic={cb_config.dynamic})")
+
+        dataloader = DataLoader(self.dataset, batch_size=1, shuffle=False)
+
+        results_dir = get_project_path(f"results/benchmark/{self.title}/{title_run}")
+        os.makedirs(results_dir, exist_ok=True)
+        # Fichier dédié (pas results.csv) : schéma différent du run classique et
+        # écrit par écrasement complet à chaque échantillon (pas d'append) — un nom
+        # partagé avec results.csv écraserait les lignes du run classique si les deux
+        # modèles cohabitent dans le même yaml/title_run (cf. task-dynamic-conic-bundle.md).
+        results_csv = os.path.join(results_dir, "results_conic_bundle.csv")
+
+        if solver_config.bounds_method == "from_file":
+            bounds_path = solver_config.bounds_file
+            if not os.path.isabs(bounds_path):
+                bounds_path = get_project_path(bounds_path)
+            bounds_csv = pd.read_csv(bounds_path)
+
+        dict_infos = dict(solver_config)
+        dict_infos.pop("certification_model_type")
+        dict_infos.pop("dynamic_conic_bundle", None)
+
+        rows = []
+        for i, (x, ytrue) in enumerate(dataloader):
+            if start is not None and i < start:
+                continue
+            if end is not None and i >= end:
+                break
+            if include_indices is not None and i not in include_indices:
+                continue
+            if skip_indices and i in skip_indices:
+                print(f"Skipping sample {i} (already processed).")
+                continue
+
+            x = x.view(-1).to(next(self.network.parameters()).device)
+            y_pred = self.network.label(x)
+            if y_pred != ytrue.item():
+                print(f"Skipping sample {i} (misclassified).")
+                continue
+
+            infos = dict(dict_infos)
+            if solver_config.bounds_method == "from_file":
+                infos["L"] = [[float(bounds_csv[bounds_csv["data_index"] == i][f"LB_Layer_{k}_Neuron_{j}"].iloc[0])
+                               for j in range(self.network.n[k])] for k in range(self.network.K + 1)]
+                infos["U"] = [[float(bounds_csv[bounds_csv["data_index"] == i][f"UB_Layer_{k}_Neuron_{j}"].iloc[0])
+                               for j in range(self.network.n[k])] for k in range(self.network.K + 1)]
+
+            common_kwargs = dict(
+                network=self.network, epsilon=self.epsilon, norm=self.norm, x=x, ytrue=y_pred,
+                data_index=i, dataset_name=self.dataset_name, network_name=self.network_name,
+                folder_name=results_dir, **infos,
+            )
+
+            if "Targeted" in model_class.__name__:
+                probe = model_class(**common_kwargs)
+                if probe.is_trivially_solved:
+                    # Toutes les cibles adverses ont été éliminées par prune_adversarial_targets
+                    # (bornes seules suffisent à certifier) : SDPSolver.solve() classique
+                    # court-circuite via get_results_trivially_solved() sans jamais construire
+                    # le modèle SDP. build_model() (appelé par DynamicConicBundleSolver.solve())
+                    # ne le fait pas — sur UntargetedSDP ça plante carrément (RLT/McCormick
+                    # construits sur un jeu de cibles vide, cf. task-dynamic-conic-bundle.md).
+                    rows.append({
+                        "network": self.network_name, "model": solver_config.certification_model_type,
+                        "dataset": self.dataset_name, "data_index": i, "label": ytrue.item(),
+                        "target": None, "epsilon": self.epsilon, "status": "trivially_solved",
+                        "optimal_value": None, "is_robust": True, "time": 0.0, "n_iter_cb": 0,
+                        "dynamic": cb_config.dynamic, "dualize": ",".join(cb_config.dualize),
+                    })
+                    pd.DataFrame(rows).to_csv(results_csv, index=False)
+                    print(f"[conic bundle] data_index={i} trivially_solved (toutes cibles prunées).")
+                    continue
+                targets = list(probe.ytargets)
+            else:
+                targets = [None]
+
+            for ytarget in targets:
+                if skip_pairs and ytarget is not None and (i, ytarget) in skip_pairs:
+                    print(f"Skipping target {ytarget} for data_index {i} (already processed).")
+                    continue
+
+                model_instance = model_class(**common_kwargs)
+                if ytarget is not None:
+                    model_instance.ytarget = ytarget
+
+                if model_instance.is_trivially_solved:
+                    # Cas UntargetedSDP (targets=[None], pas de "probe" séparé) : même
+                    # court-circuit que ci-dessus pour Targeted.
+                    rows.append({
+                        "network": self.network_name, "model": solver_config.certification_model_type,
+                        "dataset": self.dataset_name, "data_index": i, "label": ytrue.item(),
+                        "target": ytarget, "epsilon": self.epsilon, "status": "trivially_solved",
+                        "optimal_value": None, "is_robust": True, "time": 0.0, "n_iter_cb": 0,
+                        "dynamic": cb_config.dynamic, "dualize": ",".join(cb_config.dualize),
+                    })
+                    pd.DataFrame(rows).to_csv(results_csv, index=False)
+                    print(f"[conic bundle] data_index={i} target={ytarget} trivially_solved (toutes cibles prunées).")
+                    continue
+
+                model_instance.RLT_prop = model_instance.RLT_props[0]
+                cuts = model_instance.cuts_to_test[0] if model_instance.cuts_to_test else []
+
+                cb_solver = DynamicConicBundleSolver(
+                    sdp_solver=model_instance,
+                    cuts=cuts,
+                    dynamic=cb_config.dynamic,
+                    max_iter=cb_config.max_iter,
+                    C1=cb_config.C1,
+                    C2=cb_config.C2,
+                    proximal_u_init=cb_config.proximal_u_init,
+                    theta_drop_tol=cb_config.theta_drop_tol,
+                    add_batch_size=cb_config.add_batch_size,
+                    max_rounds=cb_config.max_rounds,
+                    log_theta_every_n_iter=cb_config.log_theta_every_n_iter,
+                    verbose=True,
+                )
+                t0 = time.time()
+                try:
+                    lb = cb_solver.solve()
+                    status = "optimal"
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    lb = None
+                    status = f"error: {e}"
+                elapsed = time.time() - t0
+
+                rows.append({
+                    "network": self.network_name,
+                    "model": solver_config.certification_model_type,
+                    "dataset": self.dataset_name,
+                    "data_index": i,
+                    "label": ytrue.item(),
+                    "target": ytarget,
+                    "epsilon": self.epsilon,
+                    "status": status,
+                    "optimal_value": lb,
+                    "is_robust": (lb is not None and lb >= 0),
+                    "time": elapsed,
+                    "n_iter_cb": cb_solver.n_iter,
+                    "dynamic": cb_config.dynamic,
+                    "dualize": ",".join(cb_config.dualize),
+                })
+                pd.DataFrame(rows).to_csv(results_csv, index=False)
+                print(f"[conic bundle] data_index={i} target={ytarget} optimal_value={lb} "
+                      f"n_iter={cb_solver.n_iter} ({elapsed:.2f}s)")
+
+                if ytarget is not None and lb is not None and lb >= 0:
+                    # Même heuristique que SDPSolver.solve() classique : on arrête la
+                    # recherche sur les autres cibles dès qu'une résolution robuste
+                    # est trouvée pour la cible courante.
+                    break
+
     def solve(self, title_run: str = "", start: int = None, end: int = None, skip_indices: set = None, skip_pairs: set = None, resume: bool = False, include_indices: set = None) -> None:
         print("Starting certification problem solving ...", flush=True)
         print("self.models:", self.models, flush=True)
@@ -417,7 +596,11 @@ class Certification_Problem:
 
             print("Solving with model:", model_config.certification_model_type, flush=True)
             print("model dict :", model_config, flush=True)
-            self.run(model_config, title_run, start=start, end=end, skip_indices=skip_indices, skip_pairs=skip_pairs, include_indices=include_indices)
+            cb_config = getattr(model_config, "dynamic_conic_bundle", None)
+            if cb_config is not None and cb_config.enabled:
+                self.run_conic_bundle(model_config, title_run, start=start, end=end, skip_indices=skip_indices, skip_pairs=skip_pairs, include_indices=include_indices)
+            else:
+                self.run(model_config, title_run, start=start, end=end, skip_indices=skip_indices, skip_pairs=skip_pairs, include_indices=include_indices)
 
 
 

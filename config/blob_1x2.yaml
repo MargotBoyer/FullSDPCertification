@@ -11,15 +11,12 @@ input_ball:
 divide_run : 1
 
 network :
-  name : "blob_nn_4x10"
-  path : "data/models/blob_adv_blob_nn_4x10.pt"
-  K : 5
+  name : "blob_nn_1x2"
+  path : "data/models/blob_adv_blob_nn_1x2.pt"
+  K : 2
   n :
   - 2
-  - 10
-  - 10
-  - 10
-  - 10
+  - 2
   - 3
 
 models :
@@ -80,9 +77,8 @@ models :
     dynamic_conic_bundle:
       enabled: true
       dualize: ["RLT"]
-      dynamic: true          # false = statique (5.4.1, Algorithme 2) ; true = dynamique (5.4.2)
-      max_iter: 500
-      max_rounds : 1000
+      dynamic: false          # false = statique (5.4.1, Algorithme 2) ; true = dynamique (5.4.2)
+      max_iter: 100
       C1: 1.0e-5               # critère d'arrêt (sur la progression prédite, pas réelle)
       C2: 0.1                  # ratio de la progression prédite à réaliser pour un pas sérieux
       proximal_u_init: 1.0
@@ -91,24 +87,28 @@ models :
       log_theta_every_n_iter: 1
 
 
-  
-  # # SDPt uniquement
+
+  # # SDPt
   # - certification_model_type : "TargetedSDP"
-  #   solver: "mosek_classic"  # seul backend supporté par la dynamic conic bundle method (Phase 2)
-  #   cuts :
-  #   - "RLT"
+  #   solver: "mosek_classic"
+  #   # cp_solver: "SCS"
+  #   # cp_solver_kwargs:
+  #   # eps: 1.0e-4
+  #   # max_iters: 50000
+  #   cuts : 
+  #   # - "RLT"
   #   - "triangularization"
-  #   RLT_props :
-  #   - 1.
+  #   RLT_props : 
+  #   - 0.
   #   all_combinations_cuts : false
-  #   CHORDAL_DECOMPOSITION: false  # seul cas supporté par la dynamic conic bundle method (Phase 2)
+  #   CHORDAL_DECOMPOSITION: false
   #   LAST_LAYER: false
-  #   use_callback : false
-  #   use_active_neurons: true
-  #   use_inactive_neurons : false
+  #   use_fusion: false  # Whether to use the fusion API for MOSEK
+  #   use_callback : false # Whether to use the callback for MOSEK
+  #   use_active_neurons: true # Whether to use active neurons in the certification problem as variables
+  #   use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
   #   keep_penultimate_actives : true
-  #   bounds_method: "from_file"
-  #   bounds_file : "data/bounds/blob_4x10-1_linf.csv"  # Folder where precomputed bounds are stored
+  #   bounds_method: "IBP"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
 
 
   # # SDPt + dynamic conic bundle method (main.pdf, section 5.4) : RLT dualisées
@@ -127,14 +127,12 @@ models :
   #   use_active_neurons: true
   #   use_inactive_neurons : false
   #   keep_penultimate_actives : true
-  #   bounds_method: "from_file"
-  #   bounds_file : "data/bounds/blob_4x10-1_linf.csv"
+  #   bounds_method: "IBP"
   #   dynamic_conic_bundle:
   #     enabled: true
   #     dualize: ["RLT"]
-  #     dynamic: true          # false = statique (5.4.1, Algorithme 2) ; true = dynamique (5.4.2)
-  #     max_iter: 500
-  #     max_rounds : 1000
+  #     dynamic: false          # false = statique (5.4.1, Algorithme 2) ; true = dynamique (5.4.2)
+  #     max_iter: 100
   #     C1: 1.0e-5               # critère d'arrêt (sur la progression prédite, pas réelle)
   #     C2: 0.1                  # ratio de la progression prédite à réaliser pour un pas sérieux
   #     proximal_u_init: 1.0

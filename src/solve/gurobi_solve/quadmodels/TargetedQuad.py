@@ -14,7 +14,7 @@ logger_gurobi = logging.getLogger("Gurobi_logger")
 @add_functions_to_class(
     add_objective_Lan, ReLU_constraint_Lan, quad_bounds, add_variable_z, _add_variable_z, ball_constraint
 )
-class LanQuad(GurobiSolver):
+class TargetedQuad(GurobiSolver):
     """
     A solver that uses Gurobi to solve the optimization problem.
     """
@@ -23,9 +23,9 @@ class LanQuad(GurobiSolver):
         self,
         **kwargs,
     ):
-        print("kwargs in init LanQuad : ", kwargs)
+        print("kwargs in init TargetedQuad : ", kwargs)
 
-        super().__init__(certification_model_type="LanQuad", **kwargs)
+        super().__init__(certification_model_type="TargetedQuad", **kwargs)
         self.possible_targets = [
             target for target in self.ytargets if target != self.ytrue
         ]

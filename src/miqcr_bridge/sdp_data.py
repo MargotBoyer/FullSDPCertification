@@ -144,7 +144,8 @@ def _build_lin_row(
             row[i - 1] += sign * v
         elif i == 0 and j > 0:
             row[j - 1] += sign * v
-    return row
+    # v entries are halved by MOSEK's dividing_non_diag=True → multiply by 2
+    return 2 * row
 
 
 # ---------------------------------------------------------------------------
@@ -254,13 +255,14 @@ def extract_miqcr_data(handler, max_quad_constraints: int = None) -> MiqcrData:
         print(f"[MIQCR] Objectif : k={k}  i={i}  j={j}  v={v:.4g}")
 
         # i, j : indices homogénéisés 1-based (0 = constante)
+        # v is halved by MOSEK's dividing_non_diag=True convention → multiply by 2
         if i == 0:
             if j > 0:
                 print("c[j-1] :", j - 1)
-                c[j - 1] += v
+                c[j - 1] += 2 * v
         elif j == 0:
             print("c[i-1] :", i - 1)
-            c[i - 1] += v
+            c[i - 1] += 2 * v
         else:
             fi, fj = i - 1, j - 1
             print("fi : ", fi, "  fj :", fj)
@@ -427,26 +429,8 @@ def _build_flat_order(indexes) -> list:
 
 
 def _fill_bounds(indexes, u_flat: np.ndarray, l_flat: np.ndarray, U, L) -> None:
-    """Remplit les tableaux de bornes via index_variable_z."""
-    K = indexes.K
-    n = indexes.n
-    last_layer = K if indexes.LAST_LAYER else K - 1
-    for layer in range(last_layer + 1):
-        for j in range(n[layer]):
-            if (layer, j) in indexes.stable_inactives_neurons:
-                continue
-            if (layer, j) in indexes.stable_actives_neurons:
-                if not (indexes.keep_penultimate_actives and layer == K - 1):
-                    continue
-            if layer == 0 and hasattr(indexes, 'pruned_input_neurons'):
-                if j in indexes.pruned_input_neurons:
-                    continue
-            if layer == K and indexes.LAST_LAYER:
-                if j != indexes.ytrue and j not in indexes.ytargets:
-                    continue
-            try:
-                fi = indexes.index_variable_z(layer, j, front_of_matrix=False) - 1
-                u_flat[fi] = float(U[layer][j])
-                l_flat[fi] = float(L[layer][j])
-            except (ValueError, AssertionError):
-                pass
+    """Remplit les tableaux de bornes en suivant le même ordre que _build_flat_order."""
+    flat_order = _build_flat_order(indexes)
+    for fi, (layer, j) in enumerate(flat_order):
+        u_flat[fi] = float(U[layer][j])
+        l_flat[fi] = float(L[layer][j])

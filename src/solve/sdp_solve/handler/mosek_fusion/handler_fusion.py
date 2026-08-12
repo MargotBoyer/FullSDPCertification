@@ -448,3 +448,24 @@ class MosekFusionHandler:
                 self.Constraints.list_cstr[ind]["dual_value"] = round(dual_value[0], 6)
             except Exception as e:
                 print(f"Impossible de récupérer la variable duale pour {constraint_name}: {e}")
+
+    def _dynamic_conic_bundle_not_implemented(self):
+        raise NotImplementedError(
+            "La dynamic conic bundle method (src/dynamic_conic_bundle/) n'est "
+            "implémentée que pour solver='mosek_classic' pour l'instant."
+        )
+
+    def setup_dualization(self, dualizable_names):
+        self._dynamic_conic_bundle_not_implemented()
+
+    def get_dualized_constraints_data(self):
+        self._dynamic_conic_bundle_not_implemented()
+
+    def get_constraint_dualization_data(self, names):
+        self._dynamic_conic_bundle_not_implemented()
+
+    def resolve_dualized(self, theta):
+        self._dynamic_conic_bundle_not_implemented()
+
+    def teardown_dualization(self):
+        self._dynamic_conic_bundle_not_implemented()

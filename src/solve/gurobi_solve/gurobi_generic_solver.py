@@ -177,7 +177,7 @@ class GurobiSolver(Solver):
             "data_index": self.data_index,
             "label": self.ytrue,
             "label_predicted": self.label_predicted,
-            "target": self.ytarget if "Lan" in self.__class__.__name__ else None,
+            "target": self.ytarget if "Targeted" in self.__class__.__name__ else None,
             "epsilon": self.epsilon,
             "status": self.m.Status,
             "optimal_value": getattr(self, "opt", None),

@@ -7,6 +7,7 @@ import logging
 import time
 
 from ..indexes import Indexes_Mosek_Solver
+from ..constraints import ConstraintRole
 from .objective_classic import ObjectiveClassic
 from .constraints_classic import ConstraintsClassic
 from .results_classic import (
@@ -453,3 +454,196 @@ class MosekClassicHandler:
             print(f"Constraint {name}: {val1}")
 
         return dual_variables
+
+    # ------------------------------------------------------------------
+    # Dynamic conic bundle support (src/dynamic_conic_bundle/).
+    #
+    # These four methods are the only place where the dynamic conic bundle
+    # method touches MOSEK — everything else (subgradient computation, proximal
+    # master problem, add/drop of dualized constraints) lives in pure Python/numpy
+    # in src/dynamic_conic_bundle/. Not used by the classic solve()/run_optimization()
+    # path, which never calls them.
+    #
+    # Phase 2 scope: single SDP matrix only (CHORDAL_DECOMPOSITION=False) — the
+    # interaction with the chordal decomposition (multiple P_k blocks) is a TODO
+    # for Phase 3 (see task-dynamic-conic-bundle.md).
+    # ------------------------------------------------------------------
+
+    def setup_dualization(self, dualizable_names: List[str]):
+        """
+        One-time setup before a dynamic conic bundle run on the model built by
+        build_model(): cache the base objective triplets, and for each named
+        DUALIZABLE constraint, cache its signed triplet/rhs and deactivate its
+        bound in the task (mosek.boundkey.fr, i.e. removed from the hard model).
+
+        Must be called once per build_model() call, before any resolve_dualized().
+        """
+        assert not self.CHORDAL_DECOMPOSITION, (
+            "setup_dualization: seul le cas CHORDAL_DECOMPOSITION=False (une seule "
+            "matrice SDP) est supporté en Phase 2 — l'interaction avec la "
+            "décomposition chordale est un TODO Phase 3 (task-dynamic-conic-bundle.md)."
+        )
+
+        self.Objective.format_obj()
+        self._cb_base_obj = (
+            np.asarray(self.Objective.num_matrix, dtype=np.int32),
+            np.asarray(self.Objective.i, dtype=np.int32),
+            np.asarray(self.Objective.j, dtype=np.int32),
+            np.asarray(self.Objective.value, dtype=np.float64),
+        )
+        self._cb_base_obj_constant = float(self.Objective.constant)
+
+        self._cb_dualized = []
+        self._cb_saved_bounds = {}
+
+        for name in dualizable_names:
+            entry, idx, bound_type, lb, ub = self._dualization_triplet_for(name)
+            self._cb_dualized.append(entry)
+            self._cb_saved_bounds[idx] = (bound_type, lb, ub)
+            self.task.putconbound(idx, mosek.boundkey.fr, -1e30, 1e30)
+
+        logger_mosek.info(
+            "setup_dualization: %d contraintes dualisées, %d matrices distinctes référencées",
+            len(self._cb_dualized),
+            len({int(nm) for d in self._cb_dualized for nm in d["num_matrix"]}),
+        )
+
+    def _dualization_triplet_for(self, name: str):
+        """
+        Construit le triplet signé/normalisé en <= (cf. setup_dualization) pour la
+        contrainte DUALIZABLE `name`, sans muter le task. Factorisation commune entre
+        setup_dualization() (qui en plus désactive la borne dans le task) et
+        get_constraint_dualization_data() (lecture pure, utilisée par le mode
+        dynamique pour évaluer la violation de contraintes pas encore dualisées).
+        """
+        name_to_idx = {c["name"]: idx for idx, c in enumerate(self.Constraints.list_cstr)}
+        assert name in name_to_idx, f"Contrainte dualisable inconnue : {name}"
+        idx = name_to_idx[name]
+        c = self.Constraints.list_cstr[idx]
+        assert c["role"] == ConstraintRole.DUALIZABLE, (
+            f"La contrainte '{name}' n'est pas taguée ConstraintRole.DUALIZABLE "
+            "(mark_current_dualizable() n'a pas été appelée à sa création)."
+        )
+        bound_type = c["bound_type"]
+        assert bound_type in (mosek.boundkey.up, mosek.boundkey.lo, mosek.boundkey.fx), (
+            f"Type de borne non supporté pour la dualisation : {bound_type}"
+        )
+        # Normalise en <=, forme sur laquelle porte theta_r >= 0 (fx : signe libre).
+        if bound_type == mosek.boundkey.lo:
+            sign = -1.0
+            rhs = -float(c["lb"])
+        else:
+            sign = 1.0
+            rhs = float(c["ub"] if bound_type == mosek.boundkey.up else c["lb"])
+
+        entry = {
+            "name": name,
+            "idx": idx,
+            "free_sign": bound_type == mosek.boundkey.fx,
+            "num_matrix": np.asarray(c["num_matrix"], dtype=np.int32),
+            "i": np.asarray(c["i"], dtype=np.int32),
+            "j": np.asarray(c["j"], dtype=np.int32),
+            "value": sign * np.asarray(c["value"], dtype=np.float64),
+            "rhs": rhs,
+        }
+        return entry, idx, bound_type, c["lb"], c["ub"]
+
+    def get_constraint_dualization_data(self, names: List[str]) -> List[dict]:
+        """
+        Version en lecture seule de setup_dualization() : ne touche pas au task, ne
+        désactive rien. Utilisée par le mode dynamique (DynamicConicBundleSolver)
+        pour évaluer g_r(X*) sur des contraintes DUALIZABLE pas encore dualisées
+        (candidates à l'ajout), à partir de la solution primale déjà obtenue par un
+        resolve_dualized() courant — pas de nouvel appel MOSEK.
+        """
+        return [self._dualization_triplet_for(name)[0] for name in names]
+
+    def get_dualized_constraints_data(self):
+        """Retourne la liste des contraintes dualisées mises en cache par
+        setup_dualization() — consommée par dynamic_conic_bundle.subgradient
+        pour calculer g_r = <A_r, X*> - rhs_r sans revenir dans MOSEK."""
+        return self._cb_dualized
+
+    def resolve_dualized(self, theta: dict):
+        """
+        Résout le sous-problème SDP courant avec l'objectif pénalisé
+        C + Σ_r theta_r * A_r (contraintes dualisées désactivées par
+        setup_dualization). Ne modifie que l'objectif du task, pas ses contraintes.
+
+        Parameters
+        ----------
+        theta : dict[str, float]
+            Sous-ensemble courant de multiplicateurs {constraint_name: theta_r}
+            (notation gardée identique à main.pdf, Algorithme 2 — ne pas confondre
+            avec les alpha d'alpha-CROWN, concept sans rapport).
+            Un nom absent de `theta` est traité comme theta_r = 0 (mode dynamique :
+            seules les contraintes ajoutées au round courant contribuent).
+
+        Returns
+        -------
+        dict avec "status" (mosek.solsta), "primal_obj" (valeur MOSEK de
+        <C+Σtheta_r A_r, X*>), "lb_value" (valeur du dual lagrangien
+        h(theta) = primal_obj + cte - Σ theta_r * rhs_r), et "X" (dict
+        {num_matrix: np.ndarray} des matrices primales nécessaires au calcul des
+        sous-gradients, cf. get_dualized_constraints_data()).
+        """
+        nm_base, i_base, j_base, v_base = self._cb_base_obj
+        coeff: dict = {}
+        for k in range(len(nm_base)):
+            key = (int(nm_base[k]), int(i_base[k]), int(j_base[k]))
+            coeff[key] = coeff.get(key, 0.0) + float(v_base[k])
+
+        theta_sum_rhs = 0.0
+        for d in self._cb_dualized:
+            t = float(theta.get(d["name"], 0.0))
+            if t == 0.0:
+                continue
+            theta_sum_rhs += t * d["rhs"]
+            for k in range(len(d["i"])):
+                key = (int(d["num_matrix"][k]), int(d["i"][k]), int(d["j"][k]))
+                coeff[key] = coeff.get(key, 0.0) + t * float(d["value"][k])
+
+        if coeff:
+            nm_all, i_all, j_all, v_all = zip(*[(nm, i, j, v) for (nm, i, j), v in coeff.items()])
+            self.task.putbarcblocktriplet(
+                np.array(nm_all, dtype=np.int32),
+                np.array(i_all, dtype=np.int32),
+                np.array(j_all, dtype=np.int32),
+                np.array(v_all, dtype=np.float64),
+            )
+
+        self.task.optimize()
+        status = self.task.getsolsta(mosek.soltype.itr)
+
+        result = {"status": status, "primal_obj": None, "lb_value": None, "X": {}}
+        if status not in (mosek.solsta.optimal, mosek.solsta.prim_and_dual_feas):
+            return result
+
+        primal_obj = self.task.getprimalobj(mosek.soltype.itr)
+        result["primal_obj"] = primal_obj
+        result["lb_value"] = primal_obj + self._cb_base_obj_constant - theta_sum_rhs
+
+        # Extrait X pour TOUTES les matrices du modèle (pas seulement celles des
+        # contraintes actuellement dualisées) : le mode dynamique évalue la
+        # violation de contraintes DUALIZABLE pas encore dualisées sur ce même X
+        # (cf. DynamicConicBundleSolver._solve_dynamic / get_constraint_dualization_data),
+        # donc toutes les matrices référencées par des candidates potentielles doivent
+        # être disponibles, pas seulement le sous-ensemble déjà actif. Phase 2 scope
+        # (CHORDAL_DECOMPOSITION=False) : une seule matrice, coût négligeable.
+        for num_matrix in range(self.indexes_matrices.nb_matrices):
+            dim = self.indexes_matrices.get_shape_matrix(num_matrix)
+            result["X"][num_matrix] = self.get_solution(ind_solution=num_matrix, dim=dim)
+
+        return result
+
+    def teardown_dualization(self):
+        """Restaure les contraintes dualisées (bornes d'origine) et l'objectif de
+        base dans le task. À appeler une fois à la fin d'un run de conic bundle."""
+        for idx, (bound_type, lb, ub) in self._cb_saved_bounds.items():
+            self.task.putconbound(idx, bound_type, lb, ub)
+
+        nm_base, i_base, j_base, v_base = self._cb_base_obj
+        self.task.putbarcblocktriplet(nm_base, i_base, j_base, v_base)
+
+        self._cb_dualized = []
+        self._cb_saved_bounds = {}

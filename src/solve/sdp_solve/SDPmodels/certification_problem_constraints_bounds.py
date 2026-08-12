@@ -179,6 +179,7 @@ def McCormick_inter_layers(self, k: int, neuron_prev: int, neuron_next : int):
         bound=-lb_prev
         * lb_next,
     )
+    self.handler.Constraints.mark_current_dualizable()
 
     # *************** Constraint (12c) in Lan **********************
     # z_{k - 1+1j} z_{k - 1i} <= z_{k - 1+1j} * U_{k - 1j} + z_{k - 1i} * L_{k - 1+1j} - U_{k - 1j} * L_{k - 1+1j}
@@ -216,6 +217,7 @@ def McCormick_inter_layers(self, k: int, neuron_prev: int, neuron_next : int):
         bound=-self.handler.Constraints.U_above_zero[k - 1][neuron_prev]
         * lb_next,
     )
+    self.handler.Constraints.mark_current_dualizable()
 
     # z_{k - 1+1j} z_{k - 1i} <= z_{k - 1+1j} * L_{k - 1j} + z_{k - 1i} * U_{k - 1+1j} - L_{k - 1j} * U_{k - 1+1j}
     if self.handler.Constraints.new_constraint(
@@ -252,6 +254,7 @@ def McCormick_inter_layers(self, k: int, neuron_prev: int, neuron_next : int):
         bound=-lb_prev
         * self.handler.Constraints.U_above_zero[k][neuron_next],
     )
+    self.handler.Constraints.mark_current_dualizable()
 
 
 # ***********************************************************************************************************************

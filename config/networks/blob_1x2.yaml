@@ -1,0 +1,25 @@
+data : "blob"
+train_path  : "data/datasets/blob_dataset.pth"
+test_path   : "data/datasets/blob_dataset.pth"
+evaluate_robustness_path : "data/datasets/blob_dataset.pth"
+num_classes : 3
+# Projected Gradient Descent (PGD)
+adversarial_attack : "PGD"
+epsilon : 0.3
+epsilon_test : 0.040
+alpha : 0.01
+steps : 40
+random_start : true
+num_epochs : 200
+lr : 0.001
+batch_size : 128
+K : 2
+n : 
+  - 2
+  - 2
+  - 3
+
+name_network :  "blob_nn_1x2"
+
+
+  

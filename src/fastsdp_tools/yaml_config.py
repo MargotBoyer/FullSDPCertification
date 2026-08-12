@@ -109,6 +109,37 @@ class DatasetConfig(BaseModel):
     num_samples: int
 
 
+class DynamicConicBundleConfig(BaseModel):
+    """Configuration de la conic bundle method (main.pdf, section 5.4). Ne prend
+    effet que si un modèle SDPSolverConfig référence ce bloc via
+    `dynamic_conic_bundle:`. Nécessite solver="mosek_classic" (seul backend
+    supporté en Phase 2) et CHORDAL_DECOMPOSITION=False (TODO Phase 3)."""
+
+    enabled: bool = True
+    dualize: List[str] = ["RLT"]  # Familles de coupes à dualiser (doivent être dans `cuts` et taguées ConstraintRole.DUALIZABLE)
+
+    @validator("dualize")
+    def validate_dualize(cls, v):
+        for family in v:
+            if family not in ["RLT"]:
+                raise ValueError(
+                    f"Famille de coupes '{family}' non dualisable en Phase 2 (seule 'RLT' est "
+                    "taguée ConstraintRole.DUALIZABLE pour l'instant — voir tableau Phase 1 "
+                    "de task-dynamic-conic-bundle.md pour les candidates Phase 3+)."
+                )
+        return v
+
+    dynamic: bool = False  # False = algorithme statique (5.4.1, Algorithme 2, pool fixe) ; True = dynamique (5.4.2, ajout/retrait de contraintes)
+    max_iter: int = 200  # Nombre max d'itérations proximal-bundle par round
+    C1: float = 1.0e-4  # Critère d'arrêt : arrête quand la progression *prédite* par le modèle du bundle (pas la progression réelle) tombe sous ce seuil
+    C2: float = 0.1  # Ratio (dans (0,1)) de la progression prédite à réaliser réellement pour qu'un pas soit dit "sérieux" (voir proximal_master.serious_null_step_test)
+    proximal_u_init: float = 1.0  # Paramètre proximal u (Algorithme 2, ligne 5)
+    theta_drop_tol: float = 1.0e-8  # Mode dynamique seulement : retire une contrainte active si |theta_r| < ce seuil (theta = notation main.pdf, sans rapport avec alpha-CROWN)
+    add_batch_size: int = 50  # Mode dynamique seulement : nb de contraintes les plus violées ajoutées par round
+    max_rounds: int = 100  # Mode dynamique seulement : nb max de rounds (ajout/retrait) — pas de limite propre sinon, contrairement à max_iter qui ne borne que la boucle interne par round
+    log_theta_every_n_iter: int = 1  # Fréquence (en itérations) d'enregistrement de theta_history (0 = jamais)
+
+
 class SDPSolverConfig(BaseModel):
     certification_model_type: str
 
@@ -196,6 +227,7 @@ class SDPSolverConfig(BaseModel):
     write_model : Optional[bool] = False
     INPUT_IN_VARIABLES: Union[bool, float] = True  # If False/0.0, z_0 removed from SDP; if 0<p<1, keep top p*n_0 input neurons by W_1 column norm
     solver_time_limit: Optional[int] = 7200  # Time limit in seconds for MOSEK solver (None = no limit)
+    dynamic_conic_bundle: Optional[DynamicConicBundleConfig] = None  # None = comportement classique inchangé (voir task-dynamic-conic-bundle.md)
 
 
 class GurobiSolverConfig(BaseModel):
@@ -203,9 +235,9 @@ class GurobiSolverConfig(BaseModel):
 
     @validator("certification_model_type")
     def validate_sdp_model_name(cls, v, values):
-        if v not in ["LanQuad", "MdQuad", "MzbarQuad", "ClassicLP", "LPBoundLayer"]:
+        if v not in ["TargetedQuad", "UntargetedQuad", "MzbarQuad", "ClassicLP", "LPBoundLayer"]:
             raise ValueError(
-                f"Model name {v} must be one of 'LanQuad', 'MdQuad', 'MzbarQuad','ClassicLP', 'LPBoundLayer."
+                f"Model name {v} must be one of 'TargetedQuad', 'UntargetedQuad', 'MzbarQuad','ClassicLP', 'LPBoundLayer."
             )
         return v
 
@@ -218,8 +250,14 @@ class GurobiSolverConfig(BaseModel):
     use_inactive_neurons: Optional[bool] = (
         False  # Whether to use inactive neurons in the certification problem as variables
     )
-    bounds_method: str = "IBP"
-
+    L: Optional[List[float]] = None
+    U: Optional[List[float]] = None
+    bounds_method: str = "alpha-CROWN"  # Method to compute bounds, options: "IBP", "alpha-CROWN", "GREAT_BOUNDS", "from_file"
+    bounds_file: Optional[str] = None
+    bounds_n_runs: int = 1  # Number of independent alpha-CROWN runs; best-of-N is kept (max L, min U). Ignored for non-CROWN methods.
+    write_model : Optional[bool] = False
+    INPUT_IN_VARIABLES: Union[bool, float] = True  # If False/0.0, z_0 removed from SDP; if 0<p<1, keep top p*n_0 input neurons by W_1 column norm
+    solver_time_limit: Optional[int] = 7200  # Time limit in seconds for GUROBI solver (None = no limit)
 
 class NetworkConfig(BaseModel):
     name: str
@@ -274,10 +312,10 @@ class FullCertificationConfig(BaseModel):
                 model.U = None
 
         network = values.get("network")
-        if network is not None:
+        if network is not None :
             K = network.K
             for model in v:
-                if isinstance(model.CHORDAL_DECOMPOSITION, list):
+                if isinstance(model,SDPSolverConfig) and isinstance(model.CHORDAL_DECOMPOSITION, list):
                     last_index = model.CHORDAL_DECOMPOSITION[-1][-1]
                     expected_last = 7 if model.LAST_LAYER else K - 1
                     if last_index != expected_last:

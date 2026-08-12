@@ -30,22 +30,22 @@ network :
 
 
 models :
-  # SDP-IP
-  - certification_model_type : "TargetedSDP"
-    # cuts : 
-    # - "RLT"
-    # - "triangularization"
-    # RLT_props : 
-    # - 0.1
-    # - 0.2
-    all_combinations_cuts : false
-    CHORDAL_DECOMPOSITION: false
-    LAST_LAYER: false
-    use_callback : false # Whether to use the callback for MOSEK
-    use_active_neurons: true # Whether to use active neurons in the certification problem as variables
-    use_inactive_neurons : true # Whether to use inactive neurons in the certification problem as variables
-    bounds_file: "data/bounds/9x100-0.026_linf.csv"  # Folder where precomputed bounds are stored
-    bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+  # # SDP-IP
+  # - certification_model_type : "TargetedSDP"
+  #   # cuts : 
+  #   # - "RLT"
+  #   # - "triangularization"
+  #   # RLT_props : 
+  #   # - 0.1
+  #   # - 0.2
+  #   all_combinations_cuts : false
+  #   CHORDAL_DECOMPOSITION: false
+  #   LAST_LAYER: false
+  #   use_callback : false # Whether to use the callback for MOSEK
+  #   use_active_neurons: true # Whether to use active neurons in the certification problem as variables
+  #   use_inactive_neurons : true # Whether to use inactive neurons in the certification problem as variables
+  #   bounds_file: "data/bounds/9x100-0.026_linf.csv"  # Folder where precomputed bounds are stored
+  #   bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
 
 
   # # SDP-Layer
@@ -64,26 +64,29 @@ models :
   #   bounds_file: "data/bounds/9x100-0.026_linf.csv"  # Folder where precomputed bounds are stored
   #   bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
 
-
+  
   # # SDPt
   # - certification_model_type : "TargetedSDP"
+  #   solver: "mosek_classic"
+  #   # cp_solver: "SCS"
+  #   # cp_solver_kwargs:
+  #   # eps: 1.0e-4
+  #   # max_iters: 50000
   #   cuts : 
-  #   - "RLT"
+  #   # - "RLT"
   #   - "triangularization"
   #   RLT_props : 
-  #   - 0.1
-  #   #- 0.2
+  #   - 0.
   #   all_combinations_cuts : false
-  #   CHORDAL_DECOMPOSITION: true
+  #   CHORDAL_DECOMPOSITION: false
   #   LAST_LAYER: false
   #   use_fusion: false  # Whether to use the fusion API for MOSEK
   #   use_callback : false # Whether to use the callback for MOSEK
   #   use_active_neurons: true # Whether to use active neurons in the certification problem as variables
   #   use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
+  #   keep_penultimate_actives : true
+  #   bounds_method: "from_file"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
   #   bounds_file: "data/bounds/9x100-0.026_linf.csv"  # Folder where precomputed bounds are stored
-  #   bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
-
-
 
   # - certification_model_type : "UntargetedSDP"
   #   write_model: false
@@ -115,4 +118,71 @@ models :
   #   bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
   #  # solver_time_limit : 10 # Time limit for MOSEK in seconds, set to None for no limit
 
+
+- certification_model_type : "UntargetedSDP"
+  write_model: true
+  solver : "mosek_classic"
+  cuts : 
+  - "RLT"
+  - "triangularization"
+  - "McCormick_beta_z"
+  - "beta_logits_comparaison"
+  - "beta_logits_comparaison_big_M"
+  - "sum_beta_logits_equal_logit"
+  RLT_props : 
+  - 1.
+  all_combinations_cuts : false
+  CHORDAL_DECOMPOSITION: false
+  # - [0,1]
+  # - [1,2,3]
+  # - [3,4,5,6]
+  LAST_LAYER: false
+  INPUT_IN_VARIABLES : true
+  solver: "mosek_classic"
+  use_callback : false # Whether to use the callback for MOSEK
+  use_active_neurons: true # Whether to use active neurons in the certification problem as variables
+  #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables
+  use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
+  keep_penultimate_actives : true # Whether to keep the penultimate layer active neurons in the certification problem
+  #bounds_file: "data/bounds/blob_4x10-0.5_linf.csv"  # Folder where precomputed bounds are stored
+  bounds_method: "IBP"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+
+- certification_model_type : "UntargetedSDP"
+  write_model: true
+  solver : "mosek_classic"
+  cuts : 
+  - "RLT"
+  - "triangularization"
+  - "McCormick_beta_z"
+  - "beta_logits_comparaison"
+  - "beta_logits_comparaison_big_M"
+  - "sum_beta_logits_equal_logit"
+  RLT_props : 
+  - 1.
+  all_combinations_cuts : false
+  CHORDAL_DECOMPOSITION: false
+  # - [0,1]
+  # - [1,2,3]
+  # - [3,4,5,6]
+  LAST_LAYER: false
+  INPUT_IN_VARIABLES : true
+  solver: "mosek_classic"
+  use_callback : false # Whether to use the callback for MOSEK
+  use_active_neurons: true # Whether to use active neurons in the certification problem as variables
+  #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables
+  use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
+  keep_penultimate_actives : true # Whether to keep the penultimate layer active neurons in the certification problem
+  bounds_method: "IBP"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+  dynamic_conic_bundle:
+    enabled: true
+    dualize: ["RLT"]
+    dynamic: true          # false = statique (5.4.1, Algorithme 2) ; true = dynamique (5.4.2)
+    max_iter: 500
+    max_rounds : 1000
+    C1: 1.0e-5               # critère d'arrêt (sur la progression prédite, pas réelle)
+    C2: 0.1                  # ratio de la progression prédite à réaliser pour un pas sérieux
+    proximal_u_init: 1.0
+    theta_drop_tol: 1.0e-6   # mode dynamique seulement
+    add_batch_size: 10       # mode dynamique seulement
+    log_theta_every_n_iter: 1
 

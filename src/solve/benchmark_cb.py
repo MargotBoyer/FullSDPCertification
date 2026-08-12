@@ -118,7 +118,7 @@ def create_dataframe_results_cb(
                 for certification_problem in certification_problems:
                     for McCormick in McCormicks:
                         assert McCormick in ["none", "all"]
-                        if certification_problem == "Lan":
+                        if certification_problem == "Targeted":
                             assert data_modele == "mnist" or data_modele == "moon"
                             for target in (
                                 [0, 1, 3, 4, 5, 6, 7, 8, 9]
@@ -179,7 +179,7 @@ def create_overleaf_table_cb_lan(
     name_file: str = "cb_table.tex",
     target: int = None,
 ):
-    assert certification_problem == "Lan"
+    assert certification_problem == "Targeted"
     df_data_modele_certification_problem = benchmark_cb[
         (benchmark_cb["data_modele"] == data_modele)
         & (benchmark_cb["certification_problem"] == certification_problem)
@@ -282,7 +282,7 @@ def create_overleaf_table_cb(
     """
     Crée un tableau pour Overleaf à partir du fichier CSV.
     """
-    if certification_problem == "Lan":
+    if certification_problem == "Targeted":
         create_overleaf_table_cb_lan(
             benchmark_cb,
             data_modele,
@@ -299,7 +299,7 @@ def create_overleaf_table_cb(
 
 def apply(data_modeles: List[str]):
 
-    certification_problems = ["Lan", "Md", "Mzbar"]
+    certification_problems = ["Targeted", "Md", "Mzbar"]
     factors = [0.0, 0.1]
     triangles = [0.0, 0.1]
 
@@ -314,7 +314,7 @@ def apply(data_modeles: List[str]):
     create_overleaf_table_cb(
         benchmark_cb,
         "mnist",
-        "Lan",
+        "Targeted",
         "results/conic_bundle/",
         name_file="cb_table_mnist_Lan.tex",
     )
@@ -336,7 +336,7 @@ def apply(data_modeles: List[str]):
     create_overleaf_table_cb(
         benchmark_cb,
         "moon",
-        "Lan",
+        "Targeted",
         "results/conic_bundle/",
         name_file="cb_table_moon_Lan.tex",
     )

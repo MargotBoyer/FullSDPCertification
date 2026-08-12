@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -n \"use_active_neurons\\\\|use_inactive_neurons\" /share/homes/boyerma/FastSDPCertification/src/solve/mosek_solve/SDPmodels/*.py)"
+      "Bash(grep -n \"use_active_neurons\\\\|use_inactive_neurons\" /share/homes/boyerma/FastSDPCertification/src/solve/mosek_solve/SDPmodels/*.py)",
+      "Bash(nm libmiqcr_pyapi.so)",
+      "Bash(/users/b/boyerma/share/homes/boyerma/miniconda3/envs/certif/bin/python /tmp/claude-90072/-share-homes-boyerma-FastSDPCertification/c6801a70-db94-4dcf-a0fd-b83ef93344ad/scratchpad/test_dynamic_cb.py)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(kill 3965483 3965484)",
+      "Bash(cd *)",
+      "Bash(/users/b/boyerma/share/homes/boyerma/miniconda3/envs/certif/bin/python src/certification_problem.py blob_4x10 verify-unbounded-fix --config results/benchmark/blob_nn_4x10-1/2026_08_11_17h51_18s_test-comparison-dynamic-conic-bundle-targeted/part_0_5/blob_4x10.yaml --indices 2)",
+      "Bash(/users/b/boyerma/share/homes/boyerma/miniconda3/envs/certif/bin/python -m pytest tests/test_sdp_invariants.py -q)"
     ]
   }
 }

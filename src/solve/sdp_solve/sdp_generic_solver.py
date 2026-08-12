@@ -273,6 +273,81 @@ class SDPSolver(Solver):
         _append_csv(path, row_df)
         logger_mosek.debug(f"taille_modele.csv updated — data_index={self.data_index}")
 
+    def build_model(self, cuts: Dict, verbose: bool = False):
+        """
+        Build the MOSEK task (objective + constraints, up to define_objective_sense())
+        without solving it.
+
+        Mirrors exactly the pre-solve half of run_optimization() (same calls, same
+        order) so a model built this way is identical to what a classic
+        run_optimization() would build for the same cuts — only the
+        optimize()/get_results() tail is left out, so the task can be solved
+        repeatedly (e.g. by DynamicConicBundleSolver.resolve_dualized()) without
+        rebuilding it at every iteration.
+
+        Used by DynamicConicBundleSolver (src/dynamic_conic_bundle/) ; not called by
+        the classic solve()/run_optimization() path, which is left untouched.
+        """
+        self.handler.is_robust = False
+        start_pretreatment_time = time.time()
+        self.handler.initiate_env(verbose)
+        self.handler.print_solver_info(verbose)
+        self.add_objective()
+        self.handler.initialize_variables()
+        nb_variables = self.handler.print_num_variables()
+        self.adapt_number_RLT()
+        self.add_constraints(cuts)  # Constraints must be added after variables
+        self._write_presolve_row(cuts, nb_variables)
+        self.handler.initialize_constraints()
+        self.handler.Objective.add_to_task()
+        self.handler.Constraints.add_to_task()
+        if self.write_model_ptf:
+            self.handler.write_model(
+                cuts,
+                RLT_prop=self.RLT_prop,
+                data_index=self.data_index,
+                ytarget=self.ytarget,
+            )
+        self.handler.define_objective_sense()
+        end_pretreatment_time = time.time()
+        self.handler.time_pretreatment = end_pretreatment_time - start_pretreatment_time
+
+    def get_dualizable_constraint_names(self) -> List[str]:
+        """
+        Names of the constraints tagged ConstraintRole.DUALIZABLE in the model built
+        by build_model() — the candidate pool DynamicConicBundleSolver can dualize
+        (in full for the static algorithm, or a growing subset for the dynamic one).
+        """
+        from .handler.constraints import ConstraintRole
+        return [
+            c["name"] for c in self.handler.Constraints.list_cstr
+            if c.get("role") == ConstraintRole.DUALIZABLE
+        ]
+
+    def setup_dualization(self, dualizable_names: List[str]):
+        """Passthrough to handler.setup_dualization — see DynamicConicBundleSolver."""
+        self.handler.setup_dualization(dualizable_names)
+
+    def get_dualized_constraints_data(self):
+        """Passthrough to handler.get_dualized_constraints_data."""
+        return self.handler.get_dualized_constraints_data()
+
+    def get_constraint_dualization_data(self, names: List[str]):
+        """Passthrough to handler.get_constraint_dualization_data — lecture seule,
+        utilisée par le mode dynamique pour évaluer la violation de contraintes pas
+        encore dualisées (candidates à l'ajout), sans nouvel appel MOSEK."""
+        return self.handler.get_constraint_dualization_data(names)
+
+    def resolve_dualized(self, theta: Dict[str, float]):
+        """Passthrough to handler.resolve_dualized — the only MOSEK call made by
+        DynamicConicBundleSolver at each iteration. `theta` (not `alpha`) matches
+        main.pdf's Algorithme 2 notation — unrelated to alpha-CROWN."""
+        return self.handler.resolve_dualized(theta)
+
+    def teardown_dualization(self):
+        """Passthrough to handler.teardown_dualization."""
+        self.handler.teardown_dualization()
+
     def run_optimization(self, cuts: Dict, verbose: bool = False):
         try:
             self.handler.is_robust = False
@@ -585,7 +660,7 @@ class SDPSolver(Solver):
             if verbose :
                 print("Testing cuts: ", cuts)
 
-            if "Lan" in self.__class__.__name__:
+            if "Targeted" in self.__class__.__name__:
                 if verbose :
                     print("CALLBACK ytargets : ", self.ytargets)
                 for ytarget in self.ytargets:

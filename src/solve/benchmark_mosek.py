@@ -146,7 +146,7 @@
 #     """
 #     Crée un tableau pour Overleaf à partir du fichier CSV.
 #     """
-#     assert certification_problem != "Lan"
+#     assert certification_problem != "Targeted"
 
 #     ordre_cuts = [
 #         "$\\emptyset$",
@@ -227,7 +227,7 @@
 #     """
 #     Crée un tableau pour Overleaf à partir du fichier CSV.
 #     """
-#     assert certification_problem == "Lan"
+#     assert certification_problem == "Targeted"
 #     ordre_cuts = [
 #         "$\\emptyset$",
 #         "tri",
@@ -289,7 +289,7 @@
 #                 cuts_str = df_data_modele_certification_problem.at[index, "cuts"]
 #                 div = "Y" if row["CHORDAL_DECOMPOSITION"] else "$\\emptyset$"
 
-#                 if certification_problem == "Lan":
+#                 if certification_problem == "Targeted":
 #                     f.write(
 #                         f"{int(row['target'])} & {cuts_str} & {div} & {round(row['time'])} & {round(row['optimal_value'],3)} \\\\\n"
 #                     )
@@ -312,7 +312,7 @@
 #     name_file: str = "mosek_table.tex",
 #     target: int = None,
 # ):
-#     if certification_problem == "Lan":
+#     if certification_problem == "Targeted":
 #         create_overleaf_table_mosek_lan(
 #             benchmark_mosek,
 #             data_modele,
@@ -359,7 +359,7 @@
 #     create_overleaf_table_mosek(
 #         benchmark_mosek_dataframe,
 #         "mnist",
-#         "Lan",
+#         "Targeted",
 #         folder_name,
 #         name_file="mosek_table_mnist_lan.tex",
 #     )
@@ -381,7 +381,7 @@
 #     create_overleaf_table_mosek(
 #         benchmark_mosek_dataframe,
 #         "moon",
-#         "Lan",
+#         "Targeted",
 #         folder_name,
 #         name_file="mosek_table_moon_lan.tex",
 #     )

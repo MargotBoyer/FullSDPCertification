@@ -1,5 +1,5 @@
 import logging
-from .mosek_generic_solver import *
+from .sdp_generic_solver import *
 from .get_variables import *
 from .SDPmodels.Targeted_SDP import TargetedSDP
 from .SDPmodels.Untargeted_SDP import UntargetedSDP
@@ -7,8 +7,8 @@ from .SDPmodels.Mzbar import MzbarSDP
 from .SDPmodels.SDP_attack import SDP_attack
 import os
 from fastsdp_tools.utils import get_project_path
-from handler.variables_call import LayersValues
-from run_benchmark import concat_dataframes_with_missing_columns
+from .handler.variables_call import LayersValues
+from .run_benchmark import concat_dataframes_with_missing_columns
 
 
 logger_mosek = logging.getLogger("Mosek_logger")

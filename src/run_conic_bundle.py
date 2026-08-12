@@ -33,15 +33,15 @@ from data import load_dataset
 from networks import ReLUNN
 import solve
 
-from miqcr_interface import extract_miqcr_data, run_miqcr_sdp_phase, register_sdp_solver
-from miqcr_interface.sdp_data import MiqcrData
+from miqcr_bridge import extract_miqcr_data, run_miqcr_sdp_phase, register_sdp_solver, run_lagrangian_cb
+from miqcr_bridge.sdp_data import MiqcrData
 
 
 # ---------------------------------------------------------------------------
 # Sauvegarde des matrices MIQCR
 # ---------------------------------------------------------------------------
 
-def save_miqcr_data(data: MiqcrData, folder: str, sample_index: int) -> None:
+def save_miqcr_data(data: MiqcrData, folder: str, sample_index) -> None:
     """Sauvegarde toutes les matrices MiqcrData dans un sous-dossier par échantillon."""
     sample_dir = os.path.join(folder, f"sample_{sample_index}")
     os.makedirs(sample_dir, exist_ok=True)
@@ -159,7 +159,14 @@ def build_and_extract(model_instance, cuts, max_quad_constraints: int = 1e5):
     model_instance.add_objective()
     handler.initialize_variables()
     model_instance.adapt_number_RLT()
-    model_instance.add_constraints(cuts)     # appelle end_constraints() en fin
+    model_instance.add_constraints(cuts)     # remplit list_cstr, appelle end_constraints()
+
+    # Construire le task Mosek complet (appendcons + putbarablocktriplet + putconbound)
+    # Nécessaire pour que run_lagrangian_cb puisse désactiver les Aq dans le task.
+    handler.initialize_constraints()         # appendcons(n)
+    handler.Objective.add_to_task()          # putbarcblocktriplet + putobjsense
+    handler.Constraints.add_to_task()        # putbarablocktriplet + putconbound ×n
+
     return extract_miqcr_data(handler, max_quad_constraints=max_quad_constraints)
 
 
@@ -179,6 +186,13 @@ def main():
     parser.add_argument("--max-quad", type=int, default=1e5,
                         help="Nombre max de contraintes quadratiques denses passées à MIQCR "
                              "(0 = aucune, pour valider le pipeline ; augmenter avec précaution)")
+    parser.add_argument("--solver", choices=["lagrangian", "miqcr"], default="lagrangian",
+                        help="CB solver : 'lagrangian' (défaut, CB Python sur FastSDP) ou "
+                             "'miqcr' (bibliothèque C MIQCR, incompatible avec ce problème)")
+    parser.add_argument("--cb-iter", type=int, default=100,
+                        help="Nombre max d'itérations CB (lagrangian seulement)")
+    parser.add_argument("--cb-alpha", type=float, default=1.0,
+                        help="Pas de sous-gradient : t_k = alpha / (||g||·√k)")
     args = parser.parse_args()
 
     yaml_file = f"{args.config}.yaml"
@@ -291,34 +305,56 @@ def main():
             # RLT_prop doit être initialisé avant adapt_number_RLT (comme dans solve())
             model_instance.RLT_prop = model_instance.RLT_props[0]
 
-            t0 = time.time()
-            data = build_and_extract(model_instance, cuts,
-                                     max_quad_constraints=args.max_quad)
-            t_extract = time.time() - t0
+            # Pour les modèles Targeted, boucle sur toutes les classes adversariales
+            if "Targeted" in model_class.__name__:
+                targets_to_run = list(model_instance.ytargets)
+            else:
+                targets_to_run = [None]
 
-            print(f"    Extraction MIQCR : n={data.n} m={data.m} p={data.p} "
-                  f"mq={data.mq} pq={data.pq}  ({t_extract:.2f}s)")
+            for ytarget in targets_to_run:
+                if ytarget is not None:
+                    model_instance.ytarget = ytarget
+                    print(f"\n    --- target={ytarget} ---")
 
-            save_miqcr_data(data, results_dir, i)
-            print_miqcr_data(data)
+                t0 = time.time()
+                data = build_and_extract(model_instance, cuts,
+                                         max_quad_constraints=args.max_quad)
+                t_extract = time.time() - t0
 
-            t1 = time.time()
-            result = run_miqcr_sdp_phase(data)
-            t_cb = time.time() - t1
+                print(f"    Extraction MIQCR : n={data.n} m={data.m} p={data.p} "
+                      f"mq={data.mq} pq={data.pq}  ({t_extract:.2f}s)")
 
-            print(f"    Conic Bundle terminée en {t_cb:.2f}s | LB={result.sol_sdp:.6f} | true_obj(X*)={result.true_obj_sdp:.6f}")
-            print(f"    beta max={np.abs(result.beta).max():.4f}")
+                save_key = f"{i}_target_{ytarget}" if ytarget is not None else i
+                save_miqcr_data(data, results_dir, save_key)
+                print_miqcr_data(data)
 
-            results.append({
-                "data_index": i,
-                "label": ytrue.item(),
-                "n_vars": data.n,
-                "sol_sdp": result.sol_sdp,
-                "true_obj_sdp": result.true_obj_sdp,
-                "nb_iter_cb": result.nb_iter_cb,
-                "time_build_miqcr": round(t_extract, 3),
-                "time_conic_bundle": round(t_cb, 3),
-            })
+                t1 = time.time()
+                if args.solver == "lagrangian":
+                    result = run_lagrangian_cb(
+                        model_instance.handler,
+                        data,
+                        max_iter=args.cb_iter,
+                        step_alpha=args.cb_alpha,
+                    )
+                else:
+                    result = run_miqcr_sdp_phase(data)
+                t_cb = time.time() - t1
+
+                print(f"    Conic Bundle terminée en {t_cb:.2f}s | LB={result.sol_sdp:.6f} | true_obj(X*)={result.true_obj_sdp:.6f}")
+                print(f"    beta max={np.abs(result.beta).max():.4f}")
+
+                results.append({
+                    "data_index": i,
+                    "label": ytrue.item(),
+                    "target": getattr(model_instance, "ytarget", None),
+                    "n_vars": data.n,
+                    "sol_sdp": result.sol_sdp,
+                    "true_obj_sdp": result.true_obj_sdp,
+                    "nb_iter_cb": result.nb_iter_cb,
+                    "time_build_miqcr": round(t_extract, 3),
+                    "time_conic_bundle": round(t_cb, 3),
+                })
+
             n_processed += 1
 
     print("\n" + "=" * 60)

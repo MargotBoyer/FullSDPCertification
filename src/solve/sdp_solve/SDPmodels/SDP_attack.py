@@ -11,7 +11,7 @@ from typing import List
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(current_dir))
 
-from ..mosek_generic_solver import SDPSolver
+from ..sdp_generic_solver import SDPSolver
 from networks import ReLUNN
 from .certification_problem_objective import objective_Lan
 from .certification_problem_constraints_bounds import (

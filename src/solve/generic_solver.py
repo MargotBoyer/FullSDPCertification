@@ -86,7 +86,7 @@ class Solver:
         print("Creating list of ytargets...")
         print("K : ", self.K)
         print("self.n : ", self.n)
-        if "Lan" in self.__class__.__name__ and self.ytarget is not None:
+        if "Targeted" in self.__class__.__name__ and self.ytarget is not None:
             self.ytargets = [self.ytarget]
         else:
             self.ytargets = [j for j in range(self.n[self.K]) if j != self.ytrue]

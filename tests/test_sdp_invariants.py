@@ -157,7 +157,7 @@ def _base_kwargs(inst: dict) -> dict:
 
 
 def _lan(inst: dict, ytarget: int, cuts: list, CHORDAL_DECOMPOSITION: bool = True, tag: str = "") -> TargetedSDP:
-    folder = os.path.join(inst["folder"], "lan" + tag)
+    folder = os.path.join(inst["folder"], "Targeted" + tag)
     return TargetedSDP(
         ytarget=ytarget,
         cuts=cuts,

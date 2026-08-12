@@ -258,10 +258,10 @@ def cree_toute_execution_modele(
     target: int = None,
 ):
     assert data_modele in ["blob", "moon", "mnist"]
-    assert certification_problem in ["Lan", "Mzbar", "Md"]
+    assert certification_problem in ["Targeted", "Mzbar", "Md"]
     assert factor in factors
 
-    if certification_problem == "Lan":
+    if certification_problem == "Targeted":
         assert target is not None
         chemin_fichier = give_certification_problem_parser_file(
             certification_problem, data_modele, target, McCormick
@@ -351,12 +351,12 @@ def main():
 
         try:
             for data_modele in ["moon", "mnist"]:
-                for certification_problem in ["Lan", "Md", "Mzbar"]:
+                for certification_problem in ["Targeted", "Md", "Mzbar"]:
                     for factor in factors:
                         for triangle in triangles:
                             for McCormick in McCormicks:
 
-                                if certification_problem == "Lan":
+                                if certification_problem == "Targeted":
                                     if data_modele == "blob":
                                         targets = targets_blob
                                     elif data_modele == "moon":
@@ -367,7 +367,7 @@ def main():
                                         cree_toute_execution_modele(
                                             client,
                                             data_modele=data_modele,
-                                            certification_problem="Lan",
+                                            certification_problem="Targeted",
                                             factor=factor,
                                             triangle=triangle,
                                             McCormick=McCormick,

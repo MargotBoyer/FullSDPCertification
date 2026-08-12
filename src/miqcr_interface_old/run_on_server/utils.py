@@ -9,7 +9,7 @@ targets_moon = [0]
 
 data_modeles = ["blob"]
 certification_problems = [
-    "Lan",
+    "Targeted",
     "Mzbar",
     "Md",
 ]
@@ -37,7 +37,7 @@ def give_certification_problem_parser_file(
     """
     assert data_modele in ["blob", "moon", "mnist"]
     assert McCormick in ["none", "all", "inter_layers"]
-    if certification_problem == "Lan":
+    if certification_problem == "Targeted":
         assert target is not None
         return f"conic_bundle_files/conic_bundle_{data_modele}_Lan_target={target}_McCormick={McCormick}.txt"
     elif certification_problem == "Mzbar":
@@ -58,7 +58,7 @@ def give_certification_problem_log_file(
 ):
     assert data_modele in ["blob", "moon", "mnist"]
     assert McCormick in ["none", "all", "inter_layers"]
-    if certification_problem == "Lan":
+    if certification_problem == "Targeted":
         assert target is not None
         return f"conic_bundle_files/logfiles/log_cb_{data_modele}_Lan_factor={factor}_triangle={triangle}_target={target}_McCormick={McCormick}.log"
     elif certification_problem == "Mzbar":
@@ -79,7 +79,7 @@ def give_session_screen_name(
 ):
     assert data_modele in ["blob", "moon", "mnist"]
     assert McCormick in ["none", "all", "inter_layers"]
-    if certification_problem == "Lan":
+    if certification_problem == "Targeted":
         assert target is not None
         return f"log_cb_{data_modele}_Lan_factor={factor}_triangle={triangle}_target={target}_McCormick={McCormick}"
     elif certification_problem == "Mzbar":

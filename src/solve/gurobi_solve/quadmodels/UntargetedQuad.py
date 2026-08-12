@@ -27,7 +27,7 @@ logger_gurobi = logging.getLogger("Gurobi_logger")
     add_variable_beta,
     _add_variable_beta,
 )
-class MdQuad(GurobiSolver):
+class UntargetedQuad(GurobiSolver):
     """
     A solver that uses Gurobi to solve the optimization problem.
     """
@@ -36,7 +36,7 @@ class MdQuad(GurobiSolver):
         self,
         **kwargs,
     ):
-        super().__init__(certification_model_type="MdQuad", BETAS=True, **kwargs)
+        super().__init__(certification_model_type="UntargetedQuad", BETAS=True, **kwargs)
 
 
     def add_objective(self):
