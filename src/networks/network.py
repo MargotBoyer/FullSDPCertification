@@ -4,8 +4,9 @@ import sys
 import os
 import yaml
 from fastsdp_tools import get_project_path
+from fastsdp_tools.cuda_probe import patch_torch_cuda_is_available
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
 
 
 @torch.jit.ignore(drop=True)

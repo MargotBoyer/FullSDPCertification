@@ -118,6 +118,21 @@ class DynamicConicBundleConfig(BaseModel):
     enabled: bool = True
     dualize: List[str] = ["RLT"]  # Familles de coupes à dualiser (doivent être dans `cuts` et taguées ConstraintRole.DUALIZABLE)
 
+    engine: str = "python"  # "python" (bundle proximal from-scratch, src/dynamic_conic_bundle/) | "conicbundle_native" (pont direct vers la vraie librairie ConicBundle, src/miqcr_bridge/conicbundle_native/ — cf. task-dynamic-conic-bundle.md "Pivot" : converge plus vite et plus précisément, recommandé par défaut à terme mais pas encore le défaut pour ne pas casser les runs existants)
+
+    @validator("engine")
+    def validate_engine(cls, v):
+        if v not in ["python", "conicbundle_native"]:
+            raise ValueError(
+                f"engine '{v}' inconnu — doit être 'python' (bundle from-scratch) ou "
+                "'conicbundle_native' (pont direct ConicBundle, cf. task-dynamic-conic-bundle.md)."
+            )
+        return v
+
+    # Paramètres spécifiques à engine="conicbundle_native" (ignorés par engine="python") :
+    term_relprec: float = 1.0e-7  # Critère d'arrêt de la vraie ConicBundle (cb_set_term_relprec) : arrête quand la progression prédite est sous term_relprec*(|objectif|+1)
+    eval_limit: int = 5000  # Nb max d'appels à l'oracle (cb_set_eval_limit) — indépendant de max_iter qui ne borne que les pas de descente ; un pas de descente peut englober plusieurs pas nuls/appels oracle
+
     @validator("dualize")
     def validate_dualize(cls, v):
         for family in v:
@@ -137,7 +152,9 @@ class DynamicConicBundleConfig(BaseModel):
     theta_drop_tol: float = 1.0e-8  # Mode dynamique seulement : retire une contrainte active si |theta_r| < ce seuil (theta = notation main.pdf, sans rapport avec alpha-CROWN)
     add_batch_size: int = 50  # Mode dynamique seulement : nb de contraintes les plus violées ajoutées par round
     max_rounds: int = 100  # Mode dynamique seulement : nb max de rounds (ajout/retrait) — pas de limite propre sinon, contrairement à max_iter qui ne borne que la boucle interne par round
+    max_bundle_size: Optional[int] = None  # Nb max de coupes conservées dans le bundle (FIFO). None = pas de cap (borné naturellement par max_iter) — recommandé, cf. task-dynamic-conic-bundle.md "Analyse statique vs dynamique" (cap trop petit face à dim(theta) = arrêt prématuré). Fixer un entier pour borner le coût du master problem QP à grande échelle.
     log_theta_every_n_iter: int = 1  # Fréquence (en itérations) d'enregistrement de theta_history (0 = jamais)
+    print_png: bool = False  # Si true, écrit un PNG de diagnostic par résolution (h(theta)/u/taille du bundle vs itération, cf. dynamic_conic_bundle/plotting.py) dans le dossier du run. Désactivé par défaut (coût I/O/matplotlib non négligeable sur un run à des centaines d'échantillons).
 
 
 class SDPSolverConfig(BaseModel):

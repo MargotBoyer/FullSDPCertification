@@ -26,11 +26,12 @@ from fastsdp_tools import (
     round_list_depth_3,
     change_to_zero_negative_values,
 )
+from fastsdp_tools.cuda_probe import patch_torch_cuda_is_available
 
 logger = logging.getLogger(__name__)
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
 
 
 @add_functions_to_class(

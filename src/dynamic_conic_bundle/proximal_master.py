@@ -33,7 +33,7 @@ comme une complétion, validée avec l'utilisateur — voir task-dynamic-conic-b
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -66,19 +66,25 @@ class ProximalBundle:
     à l'objectif pénalisé, exactement comme si elle n'existait pas).
 
     max_size borne le nombre de coupes conservées (FIFO, la plus ancienne tombe en
-    premier) : sans cap, le master problem (solve_master_problem) a une contrainte
-    linéaire de plus par itération et devient de plus en plus lent — observé en
-    pratique sur un réseau plus gros que blob_1x2 où ça contribuait à la
-    non-convergence en 100 itérations (cf. task-dynamic-conic-bundle.md).
+    premier). None (défaut) = pas de cap : le nombre de coupes ne peut de toute
+    façon jamais dépasser max_iter (une coupe ajoutée par itération, cf.
+    _run_bundle_round dans solver.py), donc un cap fixe est un plafond
+    artificiel qui n'apporte rien niveau mémoire/temps mais peut rendre le
+    modèle du bundle sous-déterminé quand dim(theta) (= nb de contraintes
+    dualisées) dépasse le cap — diagnostiqué comme cause d'arrêt prématuré du
+    mode statique sur blob_4x10 (dim(theta) ~ 400-960, cap à 50) : cf.
+    task-dynamic-conic-bundle.md, section "Analyse statique vs dynamique". Un
+    entier explicite reste utile pour borner le coût du master problem QP à
+    grande échelle (dim(theta) et max_iter tous deux élevés).
     """
 
     names: List[str]
     cuts: List[BundleCut] = field(default_factory=list)
-    max_size: int = 50
+    max_size: Optional[int] = None
 
     def add_cut(self, point: Dict[str, float], value: float, subgradient: Dict[str, float]):
         self.cuts.append(BundleCut(point=dict(point), value=value, subgradient=dict(subgradient)))
-        if len(self.cuts) > self.max_size:
+        if self.max_size is not None and len(self.cuts) > self.max_size:
             self.cuts.pop(0)
 
     def evaluate_model(self, theta: Dict[str, float]) -> float:

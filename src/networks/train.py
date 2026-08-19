@@ -28,11 +28,12 @@ from data import (
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from fastsdp_tools.utils import str_to_list
 from fastsdp_tools import get_project_path, Adversarial_Network_Training
+from fastsdp_tools.cuda_probe import patch_torch_cuda_is_available
 import data
 
 logger = logging.getLogger(__name__)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
 
 
 def train(model, trainloader, testloader, num_epochs=100, lr=1e-2):

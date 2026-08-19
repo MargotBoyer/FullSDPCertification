@@ -1,0 +1,65 @@
+data :
+  name : "blob"
+  path : "data/datasets/blob_dataset.pth"
+  num_classes : 3
+  num_samples : 1000
+
+input_ball:
+  norm : "Linf"
+  epsilon : 1
+
+divide_run : 1
+
+network :
+  name : "blob_nn_4x10"
+  path : "data/models/blob_adv_blob_nn_4x10.pt"
+  K : 5
+  n :
+  - 2
+  - 10
+  - 10
+  - 10
+  - 10
+  - 3
+
+models :
+  - certification_model_type : "TargetedSDP"
+    solver: "mosek_classic"
+    cuts :
+    - "RLT"
+    - "triangularization"
+    RLT_props :
+    - 1.
+    all_combinations_cuts : false
+    CHORDAL_DECOMPOSITION: false
+    LAST_LAYER: false
+    use_callback : false
+    use_active_neurons: true
+    use_inactive_neurons : false
+    keep_penultimate_actives : true
+    bounds_method: "from_file"
+    bounds_file : "data/bounds/blob_4x10-1_linf.csv"
+
+  - certification_model_type : "TargetedSDP"
+    solver: "mosek_classic"
+    cuts :
+    - "RLT"
+    - "triangularization"
+    RLT_props :
+    - 1.
+    all_combinations_cuts : false
+    CHORDAL_DECOMPOSITION: false
+    LAST_LAYER: false
+    use_callback : false
+    use_active_neurons: true
+    use_inactive_neurons : false
+    keep_penultimate_actives : true
+    bounds_method: "from_file"
+    bounds_file : "data/bounds/blob_4x10-1_linf.csv"
+    dynamic_conic_bundle:
+      enabled: true
+      dualize: ["RLT"]
+      engine: "conicbundle_native"
+      max_iter: 2000
+      term_relprec: 1.0e-7
+      eval_limit: 5000

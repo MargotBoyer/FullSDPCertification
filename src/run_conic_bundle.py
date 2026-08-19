@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader
 import pandas as pd
 
 from fastsdp_tools import get_project_path, FullCertificationConfig
+from fastsdp_tools.cuda_probe import patch_torch_cuda_is_available
 from data import load_dataset
 from networks import ReLUNN
 import solve
@@ -219,7 +220,7 @@ def main():
     dataset = load_dataset(config_path)
     print(f"Réseau : {validated.network.name} | ε={epsilon} | {len(dataset)} échantillons")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
     network = network.to(device)
 
     # register_sdp_solver(trivial_sdp_callback)  # placeholder — désactivé pour utiliser Mosek interne MIQCR

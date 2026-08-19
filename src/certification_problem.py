@@ -12,6 +12,7 @@ from solve.generic_solver import Solver
 from solve import LayersValues
 import solve
 from fastsdp_tools import FullCertificationConfig
+from fastsdp_tools.cuda_probe import patch_torch_cuda_is_available
 from pydantic import BaseModel
 import pandas as pd
 import datetime
@@ -21,6 +22,7 @@ import multiprocessing as mp
 import time
 from adversarial_attacks import PGDAttack
 from dynamic_conic_bundle import DynamicConicBundleSolver
+from miqcr_bridge.conicbundle_native import solve_native_conicbundle_dual
  
 from fastsdp_tools import create_folder_benchmark, get_project_path
 from fastsdp_tools.resume_utils import find_run_yaml, find_processed_indices, load_existing_results, log_run_history
@@ -35,7 +37,7 @@ from fastsdp_tools import get_project_path
 
 logger = logging.getLogger(__name__)
 
-device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device_ = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
 
 
 class Certification_Problem:
@@ -398,11 +400,100 @@ class Certification_Problem:
             )
             plt.close()
 
+    def _solve_conic_bundle_python(self, model_instance, cuts, cb_config, results_dir, data_index, ytarget):
+        """engine="python" : bundle proximal from-scratch (src/dynamic_conic_bundle/).
+        Retourne (optimal_value, elapsed, n_iter, status)."""
+        cb_solver = DynamicConicBundleSolver(
+            sdp_solver=model_instance,
+            cuts=cuts,
+            dynamic=cb_config.dynamic,
+            max_iter=cb_config.max_iter,
+            C1=cb_config.C1,
+            C2=cb_config.C2,
+            proximal_u_init=cb_config.proximal_u_init,
+            theta_drop_tol=cb_config.theta_drop_tol,
+            add_batch_size=cb_config.add_batch_size,
+            max_rounds=cb_config.max_rounds,
+            max_bundle_size=cb_config.max_bundle_size,
+            log_theta_every_n_iter=cb_config.log_theta_every_n_iter,
+            verbose=True,
+        )
+        t0 = time.time()
+        try:
+            lb = cb_solver.solve()
+            status = "optimal"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            lb = None
+            status = f"error: {e}"
+        elapsed = time.time() - t0
+
+        if cb_config.print_png and cb_solver.lb_history:
+            # Diagnostic h(theta)/u/taille du bundle vs itération (dynamic_conic_bundle/plotting.py).
+            # Try/except dédié : un échec de plot ne doit pas faire perdre le résultat déjà calculé.
+            try:
+                png_path = os.path.join(results_dir, f"conic_bundle_diag_{data_index}_{ytarget}.png")
+                cb_solver.save_diagnostics_png(
+                    png_path,
+                    title=f"{self.network_name} data_index={data_index} target={ytarget} "
+                          f"({'dynamique' if cb_config.dynamic else 'statique'})",
+                )
+            except Exception as e:
+                print(f"[conic bundle] échec de l'écriture du PNG de diagnostic pour "
+                      f"data_index={data_index} target={ytarget} : {e}")
+
+        return lb, elapsed, cb_solver.n_iter, status
+
+    def _solve_conic_bundle_native(self, model_instance, cuts, cb_config, results_dir, data_index, ytarget):
+        """engine="conicbundle_native" : pont direct vers la vraie librairie ConicBundle
+        (src/miqcr_bridge/conicbundle_native/, cf. task-dynamic-conic-bundle.md "Pivot").
+        Retourne (optimal_value, elapsed, n_iter, status). Pas de PNG de diagnostic
+        (pas d'historique theta/u exposé par ce moteur, contrairement à engine="python")."""
+        if cb_config.print_png:
+            print("[conic bundle] print_png non supporté pour engine='conicbundle_native' — ignoré.")
+
+        t0 = time.time()
+        try:
+            model_instance.build_model(cuts)
+            dualizable_names = model_instance.get_dualizable_constraint_names()
+            # handler_classic.initiate_env() enregistre inconditionnellement un
+            # InfoCallback MOSEK très verbeux (non lié à use_callback) — le silencer
+            # accélère fortement chaque résolution (aucun effet sur le résultat
+            # numérique), cf. task-dynamic-conic-bundle.md.
+            model_instance.handler.task.set_InfoCallback(lambda caller, douinf, intinf, lintinf: 0)
+            lb, _theta_best, n_iter = solve_native_conicbundle_dual(
+                model_instance.handler,
+                dualizable_names,
+                max_iter=cb_config.max_iter,
+                term_relprec=cb_config.term_relprec,
+                eval_limit=cb_config.eval_limit,
+                print_level=0,
+            )
+            status = "optimal"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            lb = None
+            n_iter = 0
+            status = f"error: {e}"
+        elapsed = time.time() - t0
+
+        return lb, elapsed, n_iter, status
+
     def run_conic_bundle(self, solver_config: BaseModel, title_run: str = "", start: int = None, end: int = None, skip_indices: set = None, skip_pairs: set = None, include_indices: set = None) -> None:
         """
         Variante de run() qui dualise les contraintes DUALIZABLE (RLT) au lieu de les
-        garder en dur, via DynamicConicBundleSolver (task-dynamic-conic-bundle.md),
-        déclenchée quand `solver_config.dynamic_conic_bundle.enabled` est vrai.
+        garder en dur (task-dynamic-conic-bundle.md), déclenchée quand
+        `solver_config.dynamic_conic_bundle.enabled` est vrai. Deux moteurs possibles
+        via `dynamic_conic_bundle.engine` :
+          - "python" (défaut) : bundle proximal from-scratch, `DynamicConicBundleSolver`
+            (src/dynamic_conic_bundle/).
+          - "conicbundle_native" : pont direct vers la vraie librairie ConicBundle
+            (Helmberg/Kiwiel), `solve_native_conicbundle_dual`
+            (src/miqcr_bridge/conicbundle_native/) — converge plus vite et plus
+            précisément d'après les tests sur blob_nn_4x10 (cf. task-dynamic-conic-bundle.md
+            "Pivot"), mais pas de mode dynamique ni de PNG de diagnostic.
 
         Ne réutilise pas le pipeline complet de run() (isolation par fork,
         _write_presolve_row, get_results()) : ce chemin est expérimental (Phase 2),
@@ -483,7 +574,7 @@ class Certification_Problem:
                         "dataset": self.dataset_name, "data_index": i, "label": ytrue.item(),
                         "target": None, "epsilon": self.epsilon, "status": "trivially_solved",
                         "optimal_value": None, "is_robust": True, "time": 0.0, "n_iter_cb": 0,
-                        "dynamic": cb_config.dynamic, "dualize": ",".join(cb_config.dualize),
+                        "engine": cb_config.engine, "dynamic": cb_config.dynamic, "dualize": ",".join(cb_config.dualize),
                     })
                     pd.DataFrame(rows).to_csv(results_csv, index=False)
                     print(f"[conic bundle] data_index={i} trivially_solved (toutes cibles prunées).")
@@ -509,7 +600,7 @@ class Certification_Problem:
                         "dataset": self.dataset_name, "data_index": i, "label": ytrue.item(),
                         "target": ytarget, "epsilon": self.epsilon, "status": "trivially_solved",
                         "optimal_value": None, "is_robust": True, "time": 0.0, "n_iter_cb": 0,
-                        "dynamic": cb_config.dynamic, "dualize": ",".join(cb_config.dualize),
+                        "engine": cb_config.engine, "dynamic": cb_config.dynamic, "dualize": ",".join(cb_config.dualize),
                     })
                     pd.DataFrame(rows).to_csv(results_csv, index=False)
                     print(f"[conic bundle] data_index={i} target={ytarget} trivially_solved (toutes cibles prunées).")
@@ -518,30 +609,14 @@ class Certification_Problem:
                 model_instance.RLT_prop = model_instance.RLT_props[0]
                 cuts = model_instance.cuts_to_test[0] if model_instance.cuts_to_test else []
 
-                cb_solver = DynamicConicBundleSolver(
-                    sdp_solver=model_instance,
-                    cuts=cuts,
-                    dynamic=cb_config.dynamic,
-                    max_iter=cb_config.max_iter,
-                    C1=cb_config.C1,
-                    C2=cb_config.C2,
-                    proximal_u_init=cb_config.proximal_u_init,
-                    theta_drop_tol=cb_config.theta_drop_tol,
-                    add_batch_size=cb_config.add_batch_size,
-                    max_rounds=cb_config.max_rounds,
-                    log_theta_every_n_iter=cb_config.log_theta_every_n_iter,
-                    verbose=True,
-                )
-                t0 = time.time()
-                try:
-                    lb = cb_solver.solve()
-                    status = "optimal"
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    lb = None
-                    status = f"error: {e}"
-                elapsed = time.time() - t0
+                if cb_config.engine == "conicbundle_native":
+                    lb, elapsed, n_iter_cb, status = self._solve_conic_bundle_native(
+                        model_instance, cuts, cb_config, results_dir, i, ytarget,
+                    )
+                else:
+                    lb, elapsed, n_iter_cb, status = self._solve_conic_bundle_python(
+                        model_instance, cuts, cb_config, results_dir, i, ytarget,
+                    )
 
                 rows.append({
                     "network": self.network_name,
@@ -555,13 +630,14 @@ class Certification_Problem:
                     "optimal_value": lb,
                     "is_robust": (lb is not None and lb >= 0),
                     "time": elapsed,
-                    "n_iter_cb": cb_solver.n_iter,
+                    "n_iter_cb": n_iter_cb,
+                    "engine": cb_config.engine,
                     "dynamic": cb_config.dynamic,
                     "dualize": ",".join(cb_config.dualize),
                 })
                 pd.DataFrame(rows).to_csv(results_csv, index=False)
                 print(f"[conic bundle] data_index={i} target={ytarget} optimal_value={lb} "
-                      f"n_iter={cb_solver.n_iter} ({elapsed:.2f}s)")
+                      f"n_iter={n_iter_cb} ({elapsed:.2f}s)")
 
                 if ytarget is not None and lb is not None and lb >= 0:
                     # Même heuristique que SDPSolver.solve() classique : on arrête la

@@ -3,8 +3,9 @@ import torch
 import numpy as np
 from auto_LiRPA import BoundedModule, BoundedTensor
 from auto_LiRPA.perturbations import PerturbationLpNorm
+from fastsdp_tools.cuda_probe import patch_torch_cuda_is_available
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
 
 def compute_bounds_data_crown(
     self,

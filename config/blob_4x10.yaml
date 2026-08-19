@@ -80,15 +80,10 @@ models :
     dynamic_conic_bundle:
       enabled: true
       dualize: ["RLT"]
-      dynamic: true          # false = statique (5.4.1, Algorithme 2) ; true = dynamique (5.4.2)
-      max_iter: 500
-      max_rounds : 1000
-      C1: 1.0e-5               # critère d'arrêt (sur la progression prédite, pas réelle)
-      C2: 0.1                  # ratio de la progression prédite à réaliser pour un pas sérieux
-      proximal_u_init: 1.0
-      theta_drop_tol: 1.0e-6   # mode dynamique seulement
-      add_batch_size: 10       # mode dynamique seulement
-      log_theta_every_n_iter: 1
+      engine: "conicbundle_native"
+      max_iter: 2000
+      term_relprec: 1.0e-7
+      eval_limit: 5000
 
 
   
