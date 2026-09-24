@@ -9,6 +9,15 @@ REMOTE_PROJECT_DIR="FastSDPCertification"  # Nom de ton projet/dossier sur Jean-
 # Dossiers à synchroniser
 FOLDERS_TO_SYNC=("src" "data" "notebooks" "config")
 
+# Sources ConicBundle (Helmberg/Kiwiel), nécessaires pour recompiler libcb.a puis
+# src/miqcr_bridge/conicbundle_native/libcb_native.so sur Jean-Zay (le .so compilé
+# localement ne doit pas être utilisé tel quel : autre distro/toolchain). On exclut
+# la doc Doxygen (html/, ~5,6 Mo) et les objets déjà compilés (DEBU.*/OPTI.*/lib/,
+# ABI potentiellement incompatible) : on force un rebuild propre côté Jean-Zay via
+# `make -C Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle` puis
+# `make -C src/miqcr_bridge/conicbundle_native`.
+CONICBUNDLE_DIR="Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle"
+
 # Couleurs pour les messages
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -94,6 +103,23 @@ for folder in "${FOLDERS_TO_SYNC[@]}"; do
         log_warning "Dossier '$folder' ignoré (n'existe pas localement)"
     fi
 done
+
+# Sources ConicBundle (pas dans FOLDERS_TO_SYNC : hors src/, cf. commentaire plus haut)
+if [ -d "$LOCAL_PROJECT_DIR/$CONICBUNDLE_DIR" ]; then
+    log_info "Synchronisation des sources ConicBundle ('$CONICBUNDLE_DIR')..."
+    ssh "$JEAN_ZAY_USER@$JEAN_ZAY_HOST" "mkdir -p '$REMOTE_WORK_PATH/$REMOTE_PROJECT_DIR/$CONICBUNDLE_DIR'"
+    if rsync "${RSYNC_OPTIONS[@]}" \
+        --exclude='html/' --exclude='DEBU.*/' --exclude='OPTI.*/' --exclude='lib/' \
+        "$LOCAL_PROJECT_DIR/$CONICBUNDLE_DIR/" \
+        "$JEAN_ZAY_USER@$JEAN_ZAY_HOST:$REMOTE_WORK_PATH/$REMOTE_PROJECT_DIR/$CONICBUNDLE_DIR/"; then
+        log_success "Sources ConicBundle synchronisées avec succès"
+    else
+        log_error "Erreur lors de la synchronisation des sources ConicBundle"
+        sync_success=false
+    fi
+else
+    log_warning "Dossier '$CONICBUNDLE_DIR' ignoré (n'existe pas localement)"
+fi
 
 if [ "$sync_success" = true ]; then
     log_success "Synchronisation terminée avec succès !"

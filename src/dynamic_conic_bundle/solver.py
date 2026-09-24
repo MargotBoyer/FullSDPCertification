@@ -27,10 +27,14 @@ get_dualized_constraints_data, get_constraint_dualization_data,
 get_dualizable_constraint_names) — cf. contrainte non-négociable de
 task-dynamic-conic-bundle.md.
 
-TODO Phase 3 : CHORDAL_DECOMPOSITION=True (plusieurs blocs P_k) n'est pas supporté
-(cf. l'assertion dans MosekClassicHandler.setup_dualization) — l'interaction entre la
-décomposition chordale et la dualisation des contraintes RLT/McCormick inter-blocs
-reste à concevoir.
+CHORDAL_DECOMPOSITION=True (grouping standard [k,k+1]) est supporté par
+MosekClassicHandler.setup_dualization/resolve_dualized depuis
+task-dynamic-conic-bundle.md "Pivot ... Phase A" (validé via le pont
+conicbundle_native — aucune contrainte DUALIZABLE ne traverse deux blocs pour ce
+grouping). Pas re-testé spécifiquement à travers DynamicConicBundleSolver
+lui-même (moteur "python"), mais passe par exactement les mêmes méthodes
+handler, donc la conclusion devrait transférer. Les regroupements custom
+(List[List[int]]) restent hors périmètre (TODO Phase D).
 """
 from __future__ import annotations
 
@@ -62,10 +66,13 @@ class DynamicConicBundleSolver:
         u_max: float = 1e6,
         u_max_factor: float = 1e3,
         max_bundle_size: Optional[int] = None,
+        factor: Optional[float] = None,
         theta_drop_tol: float = 1e-8,
         add_batch_size: int = 50,
         max_rounds: int = 100,
         log_theta_every_n_iter: int = 1,
+        stop_when_positive: bool = True,
+        positivity_threshold: float = 1e-6,
         verbose: bool = False,
     ):
         """
@@ -123,6 +130,16 @@ class DynamicConicBundleSolver:
             bundle (modèle sous-déterminé — cf. task-dynamic-conic-bundle.md,
             "Analyse statique vs dynamique"). Fixer un entier reste utile pour
             borner le coût du master problem QP à grande échelle.
+        factor : Optional[float]
+            Équivalent du paramètre FACTOR de la librairie MIQCR d'origine
+            (Miqcr-1.0_.../src/parameters.h — "Proportion of the considered
+            constraints into the SDP solver"), transposé ici à nos contraintes
+            DUALIZABLE (RLT) plutôt qu'aux McCormick internes de MIQCR. Ignoré si
+            max_bundle_size est déjà fourni explicitement (max_bundle_size a
+            toujours priorité). Sinon, si factor n'est pas None, max_bundle_size
+            est recalculé dans solve() (une fois all_dualizable connu) en
+            max(1, round(factor * len(all_dualizable))). None (défaut) laisse
+            max_bundle_size inchangé.
         theta_drop_tol : float
             Mode dynamique seulement : retire une contrainte active si |theta_r| en
             dessous de ce seuil au round suivant.
@@ -139,6 +156,16 @@ class DynamicConicBundleSolver:
             garantie convergée sur l'ensemble des contraintes dualisables).
         log_theta_every_n_iter : int
             Fréquence (en itérations) d'enregistrement dans theta_history (0 = jamais).
+        stop_when_positive : bool
+            Si True (défaut), arrête le bundle (round courant + mode dynamique) dès
+            qu'un h(theta) évalué (au centre initial d'un round ou après un pas
+            d'essai, sérieux ou nul) dépasse positivity_threshold. Par dualité
+            faible, un seul h(theta) valide strictement positif suffit déjà à
+            certifier la robustesse — inutile de continuer à affiner theta ou à
+            ajouter des contraintes (mode dynamique). self.stop_reason vaut
+            "reached_positivity" dans ce cas après solve(), sinon None.
+        positivity_threshold : float
+            Seuil utilisé par stop_when_positive.
         """
         self.sdp_solver = sdp_solver
         self.cuts = cuts
@@ -152,10 +179,14 @@ class DynamicConicBundleSolver:
         self.u_max_factor = u_max_factor
         self._u_calibration_base: Optional[float] = None
         self.max_bundle_size = max_bundle_size
+        self.factor = factor
         self.theta_drop_tol = theta_drop_tol
         self.add_batch_size = add_batch_size
         self.max_rounds = max_rounds
         self.log_theta_every_n_iter = log_theta_every_n_iter
+        self.stop_when_positive = stop_when_positive
+        self.positivity_threshold = positivity_threshold
+        self.stop_reason: Optional[str] = None
         self.verbose = verbose
         self._regime = 0
         self._u_calibrated = False
@@ -331,6 +362,13 @@ class DynamicConicBundleSolver:
                 self.cuts,
             )
 
+        if self.max_bundle_size is None and self.factor is not None:
+            self.max_bundle_size = max(1, round(self.factor * len(all_dualizable)))
+            logger_cb.info(
+                "factor=%s x %d contraintes dualisables => max_bundle_size=%d",
+                self.factor, len(all_dualizable), self.max_bundle_size,
+            )
+
         if not self.dynamic:
             lb, _ = self._solve_static(all_dualizable)
         else:
@@ -375,6 +413,10 @@ class DynamicConicBundleSolver:
         self._calibrate_u(g_center)
         self._log_iteration(theta, h_center, len(bundle.cuts))
 
+        if self.stop_when_positive and h_center > self.positivity_threshold:
+            self.stop_reason = "reached_positivity"
+            return theta, h_center, X_center, bundle
+
         if not active_names:
             # Rien à dualiser (mode dynamique, round 0) : theta est de dimension 0,
             # aucun master problem à résoudre — h_center est déjà la valeur du round
@@ -412,6 +454,14 @@ class DynamicConicBundleSolver:
 
             if test.is_serious_step or test.should_stop:
                 theta, h_center, X_center = theta_new, h_new, X_new
+
+            if self.stop_when_positive and h_new > self.positivity_threshold:
+                # h_new est une borne duale valide (dualite faible) meme sur un pas
+                # nul -- un seul point > seuil suffit deja a certifier, inutile de
+                # continuer a affiner theta.
+                theta, h_center, X_center = theta_new, h_new, X_new
+                self.stop_reason = "reached_positivity"
+                break
 
             if test.should_stop:
                 break
@@ -453,6 +503,10 @@ class DynamicConicBundleSolver:
                 break
             n_rounds += 1
             theta, h_center, X_center, bundle = self._run_bundle_round(active, theta, bundle)
+
+            if self.stop_reason == "reached_positivity":
+                logger_cb.info("Round %d: h(theta)=%.6f > positivity_threshold — arrêt.", n_rounds, h_center)
+                break
 
             if not inactive:
                 logger_cb.info("Round %d: plus aucune contrainte à ajouter, arrêt.", n_rounds)

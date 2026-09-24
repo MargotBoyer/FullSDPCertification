@@ -12,34 +12,53 @@ def find_run_yaml(run_folder: Path) -> Path:
     raise FileNotFoundError(f"No YAML config found in {run_folder} or its parent.")
 
 
+def _collect_done_from_csv(csv_path: Path, is_incomplete, fully_done: set, done_pairs: set) -> None:
+    """Read one results-style CSV (data_index, target, status columns) and merge its
+    completed rows into `fully_done`/`done_pairs` in place. `is_incomplete(status_str)`
+    decides which rows do NOT represent a finished solve (and are therefore skipped)."""
+    try:
+        df = pd.read_csv(csv_path, usecols=["data_index", "target", "status"])
+        df = df[~df["status"].astype(str).apply(is_incomplete)]
+        for _, row in df.iterrows():
+            if pd.isna(row["data_index"]):
+                continue
+            idx = int(row["data_index"])
+            if pd.isna(row["target"]):
+                fully_done.add(idx)
+            else:
+                done_pairs.add((idx, int(row["target"])))
+    except (KeyError, pd.errors.EmptyDataError, ValueError):
+        pass
+
+
 def find_processed_indices(run_folder: Path) -> tuple:
     """Return (fully_done, done_pairs).
 
-    fully_done: set of data_index where target is NaN — UntargetedSDP rows where the entire
-                sample is solved in one shot, so no partial state is possible.
+    fully_done: set of data_index where target is NaN — UntargetedSDP rows (or a
+                Targeted "trivially_solved" probe) where the entire sample is solved
+                in one shot, so no partial state is possible.
     done_pairs: set of (data_index, target) int tuples — TargetedSDP rows where each
                 target class is a separate SDP solve and partial completion can occur.
 
-    Rows with status "pre-solve" or "crashed" are excluded: they were written before
-    (or during) optimization and do not represent a completed solve.
+    Scans both the classic `results.csv` (rows with status "pre-solve" or "crashed"
+    excluded : written before/during optimization, not a completed solve) and the
+    experimental conic-bundle path's `results_conic_bundle.csv` (certification_problem.py
+    run_conic_bundle — same data_index/target/status schema, but no "pre-solve"/"crashed"
+    placeholder rows since it only writes after a target fully returns; rows with a
+    status starting with "error" are excluded instead, so a run that raised an exception
+    gets retried on --resume rather than being treated as done).
     """
     _INCOMPLETE_STATUSES = {"pre-solve", "crashed"}
     fully_done = set()
     done_pairs = set()
     for csv_path in run_folder.rglob("results.csv"):
-        try:
-            df = pd.read_csv(csv_path, usecols=["data_index", "target", "status"])
-            df = df[~df["status"].astype(str).isin(_INCOMPLETE_STATUSES)]
-            for _, row in df.iterrows():
-                if pd.isna(row["data_index"]):
-                    continue
-                idx = int(row["data_index"])
-                if pd.isna(row["target"]):
-                    fully_done.add(idx)
-                else:
-                    done_pairs.add((idx, int(row["target"])))
-        except (KeyError, pd.errors.EmptyDataError, ValueError):
-            pass
+        _collect_done_from_csv(
+            csv_path, lambda s: s in _INCOMPLETE_STATUSES, fully_done, done_pairs
+        )
+    for csv_path in run_folder.rglob("results_conic_bundle.csv"):
+        _collect_done_from_csv(
+            csv_path, lambda s: s.startswith("error"), fully_done, done_pairs
+        )
     return fully_done, done_pairs
 
 

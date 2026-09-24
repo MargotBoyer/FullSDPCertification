@@ -118,64 +118,49 @@ models :
   #   bounds_method: "from_file"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
   #  # solver_time_limit : 10 # Time limit for MOSEK in seconds, set to None for no limit
 
-  - certification_model_type : "UntargetedSDP"
-    write_model: true
-    solver : "mosek_classic"
-    cuts : 
+  # - certification_model_type : "TargetedSDP"
+  #   solver: "mosek_classic"
+  #   cuts :
+  #   - "RLT"
+  #   - "triangularization"
+  #   RLT_props :
+  #   - 0.2
+  #   all_combinations_cuts : false
+  #   CHORDAL_DECOMPOSITION: true   # grouping standard [k,k+1]
+  #   LAST_LAYER: false
+  #   use_callback : false
+  #   use_active_neurons: true
+  #   use_inactive_neurons : false
+  #   keep_penultimate_actives : true
+  #   bounds_method: "from_file"
+  #   bounds_file : "data/bounds/9x100-0.026_linf.csv"
+  
+  - certification_model_type : "TargetedSDP"
+    solver: "mosek_classic"
+    cuts :
     - "RLT"
     - "triangularization"
-    - "McCormick_beta_z"
-    - "beta_logits_comparaison"
-    - "beta_logits_comparaison_big_M"
-    - "sum_beta_logits_equal_logit"
-    RLT_props : 
-    - 1.
+    RLT_props :
+    - 0.2
     all_combinations_cuts : false
-    CHORDAL_DECOMPOSITION: false
-    # - [0,1]
-    # - [1,2,3]
-    # - [3,4,5,6]
+    CHORDAL_DECOMPOSITION: true   # grouping standard [k,k+1] -- indispensable pour espérer <=2s/résolution sur ce réseau (un bloc SDP global serait bien trop gros)
     LAST_LAYER: false
-    INPUT_IN_VARIABLES : true
-    solver: "mosek_classic"
-    use_callback : false # Whether to use the callback for MOSEK
-    use_active_neurons: true # Whether to use active neurons in the certification problem as variables
-    #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables
-    use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
-    keep_penultimate_actives : true # Whether to keep the penultimate layer active neurons in the certification problem
-    #bounds_file: "data/bounds/blob_4x10-0.5_linf.csv"  # Folder where precomputed bounds are stored
-    bounds_method: "IBP"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
-
-  - certification_model_type : "UntargetedSDP"
-    write_model: true
-    solver : "mosek_classic"
-    cuts : 
-    - "RLT"
-    - "triangularization"
-    - "McCormick_beta_z"
-    - "beta_logits_comparaison"
-    - "beta_logits_comparaison_big_M"
-    - "sum_beta_logits_equal_logit"
-    RLT_props : 
-    - 1.
-    all_combinations_cuts : false
-    CHORDAL_DECOMPOSITION: false
-    # - [0,1]
-    # - [1,2,3]
-    # - [3,4,5,6]
-    LAST_LAYER: false
-    INPUT_IN_VARIABLES : true
-    solver: "mosek_classic"
-    use_callback : false # Whether to use the callback for MOSEK
-    use_active_neurons: true # Whether to use active neurons in the certification problem as variables
-    #ultimate_layer_use_active_neurons: 5 # Whether to use active neurons in the ultimate layer in the certification problem as variables
-    use_inactive_neurons : false # Whether to use inactive neurons in the certification problem as variables
-    keep_penultimate_actives : true # Whether to keep the penultimate layer active neurons in the certification problem
-    bounds_method: "IBP"   #"alpha-CROWN"  # Method to compute bounds, options: "IBP", "GREAT_BOUNDS", "GREAT_BOUNDS_LIN"
+    use_callback : false
+    use_active_neurons: true
+    use_inactive_neurons : false
+    keep_penultimate_actives : true
+    bounds_method: "from_file"
+    bounds_file : "data/bounds/9x100-0.026_linf.csv"
+    solver_time_limit: 2   # dparam MOSEK optimizer_max_time -- appliqué au task réutilisé par resolve_dualized() à CHAQUE itération du bundle, donc plafonne bien chaque résolution SDP individuelle (pas cumulatif)
     dynamic_conic_bundle:
       enabled: true
       dualize: ["RLT"]
       engine: "conicbundle_native"
-      max_iter: 2000
+      max_iter: 5
       term_relprec: 1.0e-7
-      eval_limit: 5000
+      log_every : 1
+      print_level: 1     # trace native ConicBundle par itération (0 = silencieux)
+      eval_limit: 10
+      print_png : true
+      max_bundle_size : 200
+      # factor : 0.1   # équivalent du FACTOR de MIQCR, transposé aux contraintes RLT dualisables : si renseigné (et max_bundle_size absent), max_bundle_size = max(1, round(factor * nb_contraintes_dualizable))

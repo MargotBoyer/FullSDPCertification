@@ -415,13 +415,16 @@ class Certification_Problem:
             add_batch_size=cb_config.add_batch_size,
             max_rounds=cb_config.max_rounds,
             max_bundle_size=cb_config.max_bundle_size,
+            factor=cb_config.factor,
             log_theta_every_n_iter=cb_config.log_theta_every_n_iter,
+            stop_when_positive=cb_config.stop_when_positive,
+            positivity_threshold=cb_config.positivity_threshold,
             verbose=True,
         )
         t0 = time.time()
         try:
             lb = cb_solver.solve()
-            status = "optimal"
+            status = cb_solver.stop_reason or "optimal"
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -448,11 +451,10 @@ class Certification_Problem:
     def _solve_conic_bundle_native(self, model_instance, cuts, cb_config, results_dir, data_index, ytarget):
         """engine="conicbundle_native" : pont direct vers la vraie librairie ConicBundle
         (src/miqcr_bridge/conicbundle_native/, cf. task-dynamic-conic-bundle.md "Pivot").
-        Retourne (optimal_value, elapsed, n_iter, status). Pas de PNG de diagnostic
-        (pas d'historique theta/u exposé par ce moteur, contrairement à engine="python")."""
-        if cb_config.print_png:
-            print("[conic bundle] print_png non supporté pour engine='conicbundle_native' — ignoré.")
-
+        Retourne (optimal_value, elapsed, n_iter, status). Si cb_config.print_png, écrit
+        le même PNG de diagnostic (h(theta)/meilleur h/u/taille du bundle/nb vrais pas
+        vs itération) que engine="python", construit à partir de l'API C ConicBundle
+        (cb_get_candidate_value/cb_get_last_weight/cb_get_bundle_values)."""
         t0 = time.time()
         try:
             model_instance.build_model(cuts)
@@ -462,15 +464,27 @@ class Certification_Problem:
             # accélère fortement chaque résolution (aucun effet sur le résultat
             # numérique), cf. task-dynamic-conic-bundle.md.
             model_instance.handler.task.set_InfoCallback(lambda caller, douinf, intinf, lintinf: 0)
-            lb, _theta_best, n_iter = solve_native_conicbundle_dual(
+            png_save_path = None
+            if cb_config.print_png:
+                png_save_path = os.path.join(results_dir, f"conic_bundle_diag_{data_index}_{ytarget}.png")
+            lb, _theta_best, n_iter, cb_status = solve_native_conicbundle_dual(
                 model_instance.handler,
                 dualizable_names,
                 max_iter=cb_config.max_iter,
                 term_relprec=cb_config.term_relprec,
                 eval_limit=cb_config.eval_limit,
-                print_level=0,
+                print_level=cb_config.print_level,
+                log_every=cb_config.log_every,
+                max_bundle_size=cb_config.max_bundle_size,
+                factor=cb_config.factor,
+                max_new_subgradients=cb_config.max_new_subgradients,
+                print_png=cb_config.print_png,
+                png_save_path=png_save_path,
+                png_title=f"{self.network_name} data_index={data_index} target={ytarget} (native)",
+                stop_when_positive=cb_config.stop_when_positive,
+                positivity_threshold=cb_config.positivity_threshold,
             )
-            status = "optimal"
+            status = cb_status or "optimal"
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -681,17 +695,30 @@ class Certification_Problem:
 
 
 class _Tee:
-    """Write to multiple streams simultaneously (e.g. stdout + log file)."""
+    """Write to multiple streams simultaneously (e.g. stdout + log file).
+
+    Un flux devenu inutilisable (terminal fermé/detache -> BrokenPipeError,
+    ou tout autre OSError) est abandonne silencieusement plutot que de faire
+    planter tout le run : on a deja perdu un run entier (26h de conic bundle
+    natif) a cause d'un write() sur le stdout d'origine qui a leve apres que
+    le terminal ait ete ferme. Le fichier de log, lui, continue d'etre ecrit.
+    """
     def __init__(self, *streams):
-        self._streams = streams
+        self._streams = list(streams)
 
     def write(self, data):
-        for s in self._streams:
-            s.write(data)
+        for s in list(self._streams):
+            try:
+                s.write(data)
+            except (BrokenPipeError, OSError, ValueError):
+                self._streams.remove(s)
 
     def flush(self):
-        for s in self._streams:
-            s.flush()
+        for s in list(self._streams):
+            try:
+                s.flush()
+            except (BrokenPipeError, OSError, ValueError):
+                self._streams.remove(s)
 
     def fileno(self):
         return self._streams[0].fileno()

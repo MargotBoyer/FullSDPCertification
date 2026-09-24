@@ -1,0 +1,72 @@
+data :
+  name : "blob"
+  path : "data/datasets/blob_dataset.pth"
+  num_classes : 3
+  num_samples : 1000
+
+input_ball:
+  norm : "Linf"
+  epsilon : 1
+
+divide_run : 1
+
+network :
+  name : "blob_nn_4x10"
+  path : "data/models/blob_adv_blob_nn_4x10.pt"
+  K : 5
+  n :
+  - 2
+  - 10
+  - 10
+  - 10
+  - 10
+  - 3
+
+models :
+  # - certification_model_type : "TargetedSDP"
+  #   solver: "mosek_classic"
+  #   cuts :
+  #   - "RLT"
+  #   - "triangularization"
+  #   RLT_props :
+  #   - 1.
+  #   all_combinations_cuts : false
+  #   CHORDAL_DECOMPOSITION: true   # grouping standard [k,k+1]
+  #   LAST_LAYER: false
+  #   use_callback : false
+  #   use_active_neurons: true
+  #   use_inactive_neurons : false
+  #   keep_penultimate_actives : true
+  #   bounds_method: "from_file"
+  #   bounds_file : "data/bounds/blob_4x10-1_linf.csv"
+
+  - certification_model_type : "TargetedSDP"
+    solver: "mosek_classic"
+    cuts :
+    - "RLT"
+    - "triangularization"
+    RLT_props :
+    - 1.
+    all_combinations_cuts : false
+    CHORDAL_DECOMPOSITION: true   # grouping standard [k,k+1]
+    LAST_LAYER: false
+    use_callback : false
+    use_active_neurons: true
+    use_inactive_neurons : false
+    keep_penultimate_actives : true
+    bounds_method: "from_file"
+    bounds_file : "data/bounds/blob_4x10-1_linf.csv"
+    dynamic_conic_bundle:
+      enabled: true
+      dualize: ["RLT"]
+      engine: "conicbundle_native"
+      max_iter: 200
+      term_relprec: 1.0e-7
+      log_every : 1
+      print_level: 1     # trace native ConicBundle par itération (0 = silencieux)
+      eval_limit: 2000
+      print_png : true
+      max_bundle_size : 200
+      # factor : 0.1   # équivalent du FACTOR de MIQCR, transposé aux contraintes RLT dualisables : si renseigné (et max_bundle_size absent), max_bundle_size = max(1, round(factor * nb_contraintes_dualizable))
+      stop_when_positive : true   # stop when the dual solution is positive (i.e. the primal is infeasible)
+      positivity_threshold : 1e-6   # threshold for the dual solution to be considered positive (i.e. the primal is infeasible)

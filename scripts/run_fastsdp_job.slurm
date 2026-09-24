@@ -19,6 +19,18 @@ module load openmpi/4.1.1
 # Active ton venv
 source /lustre/fswork/projects/rech/llc/uvq13au/venvs/fastsdp/bin/activate
 
+# Recompile systematiquement le pont ConicBundle natif (src/miqcr_bridge/conicbundle_native/)
+# avant de lancer le run : le .so ne doit jamais etre reutilise d'une machine a l'autre
+# (ABI/toolchain), et recompiler coute ~2-3 min contre un job de plusieurs heures.
+# Sans effet si la conic bundle native n'est pas utilisee dans le yaml.
+if [ -d "Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle" ]; then
+    echo "Recompilation de ConicBundle (MODE=OPTI) + du pont natif..."
+    module load gcc
+    make -C Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle MODE=OPTI \
+        && make -C src/miqcr_bridge/conicbundle_native \
+        || { echo "ERREUR: echec de compilation de ConicBundle/libcb_native.so"; exit 1; }
+fi
+
 if [ -n "$RESUME_FOLDER" ]; then
     # ── MODE REPRISE ──────────────────────────────────────────────────────────
     # Les logs vont dans le dossier existant (nouveau fichier par job ID)

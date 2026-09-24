@@ -10,6 +10,16 @@ REMOTE_PROJECT_DIR="$REMOTE_WORK_DIR/FastSDPCertification"  # Nom de ton projet/
 # Dossiers à synchroniser
 FOLDERS_TO_SYNC=("src" "data" "notebooks" "config")
 
+# Sources ConicBundle (Helmberg/Kiwiel), nécessaires pour recompiler libcb.a puis
+# src/miqcr_bridge/conicbundle_native/libcb_native.so sur Jean-Zay (le .so compilé
+# localement ne doit pas être utilisé tel quel : autre distro/toolchain). On exclut
+# la doc Doxygen (html/) et les objets déjà compilés (DEBU.*/OPTI.*/lib/, ABI
+# potentiellement incompatible) : on force un rebuild propre côté Jean-Zay via
+# `make -C Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle` puis
+# `make -C src/miqcr_bridge/conicbundle_native`.
+CONICBUNDLE_PARENT="Miqcr-1.0_triang_sbb_gurobiter_QCP5"
+CONICBUNDLE_DIR="$CONICBUNDLE_PARENT/ConicBundle"
+
 # Couleurs pour les messages
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -90,6 +100,12 @@ if [ "$1" = "--resume" ]; then
         fi
     done
     rsync -az -e "ssh $SSH_OPTS" "$LOCAL_PROJECT_DIR/scripts" "$JEAN_ZAY_USER@$JEAN_ZAY_HOST:$REMOTE_PROJECT_DIR"
+    if [ -d "$LOCAL_PROJECT_DIR/$CONICBUNDLE_DIR" ]; then
+        ssh_jz "mkdir -p '$REMOTE_PROJECT_DIR/$CONICBUNDLE_PARENT'"
+        rsync -az -e "ssh $SSH_OPTS" \
+            --exclude='html/' --exclude='DEBU.*/' --exclude='OPTI.*/' --exclude='lib/' \
+            "$LOCAL_PROJECT_DIR/$CONICBUNDLE_DIR" "$JEAN_ZAY_USER@$JEAN_ZAY_HOST:$REMOTE_PROJECT_DIR/$CONICBUNDLE_PARENT/"
+    fi
     log_success "Synchronisation terminée."
 
     # Chercher les sous-dossiers part_* sur Jean-Zay
@@ -181,6 +197,13 @@ for folder in "${FOLDERS_TO_SYNC[@]}"; do
 done
 
 rsync -az -e "ssh $SSH_OPTS" "$LOCAL_PROJECT_DIR/scripts" "$JEAN_ZAY_USER@$JEAN_ZAY_HOST:$REMOTE_PROJECT_DIR"
+
+if [ -d "$LOCAL_PROJECT_DIR/$CONICBUNDLE_DIR" ]; then
+    ssh_jz "mkdir -p '$REMOTE_PROJECT_DIR/$CONICBUNDLE_PARENT'"
+    rsync -az -e "ssh $SSH_OPTS" \
+        --exclude='html/' --exclude='DEBU.*/' --exclude='OPTI.*/' --exclude='lib/' \
+        "$LOCAL_PROJECT_DIR/$CONICBUNDLE_DIR" "$JEAN_ZAY_USER@$JEAN_ZAY_HOST:$REMOTE_PROJECT_DIR/$CONICBUNDLE_PARENT/"
+fi
 
 log_success "Synchronisation terminée."
 

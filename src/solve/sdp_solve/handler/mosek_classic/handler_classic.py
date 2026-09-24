@@ -88,6 +88,7 @@ class MosekClassicHandler:
             Whether the last layer is included in the matrix of the z variables or not.
         """
         print("Initializing MosekClassicHandler")
+        self._cb_name_to_idx = None  # cache paresseux, cf. _get_cb_name_to_idx (dynamic conic bundle)
         self.CHORDAL_DECOMPOSITION = kwargs.get("CHORDAL_DECOMPOSITION", False)
 
         self.LAST_LAYER = kwargs.get("LAST_LAYER", False)
@@ -464,9 +465,14 @@ class MosekClassicHandler:
     # in src/dynamic_conic_bundle/. Not used by the classic solve()/run_optimization()
     # path, which never calls them.
     #
-    # Phase 2 scope: single SDP matrix only (CHORDAL_DECOMPOSITION=False) — the
-    # interaction with the chordal decomposition (multiple P_k blocks) is a TODO
-    # for Phase 3 (see task-dynamic-conic-bundle.md).
+    # CHORDAL_DECOMPOSITION=False (bloc unique) et =True (grouping standard
+    # [k,k+1], plusieurs blocs P_k) sont supportés — validé empiriquement
+    # (task-dynamic-conic-bundle.md, "Pivot ... Phase A") : aucune contrainte
+    # DUALIZABLE ne référence deux blocs à la fois pour ce grouping, et
+    # resolve_dualized() est déjà générique par bloc (num_matrix). Les
+    # regroupements custom (List[List[int]]) restent hors périmètre (TODO
+    # Phase D — interaction avec l'heuristique de relaxation des produits
+    # croisés non vérifiée), rejetés explicitement par setup_dualization().
     # ------------------------------------------------------------------
 
     def setup_dualization(self, dualizable_names: List[str]):
@@ -477,11 +483,20 @@ class MosekClassicHandler:
         bound in the task (mosek.boundkey.fr, i.e. removed from the hard model).
 
         Must be called once per build_model() call, before any resolve_dualized().
+
+        CHORDAL_DECOMPOSITION=False (un seul bloc) et CHORDAL_DECOMPOSITION=True
+        (grouping standard [k,k+1]) sont supportés : le mécanisme de dualisation
+        est déjà générique par blocs (triplets (num_matrix,i,j,value), extraction
+        de X bloc par bloc) — cf. task-dynamic-conic-bundle.md, "Pivot ... Phase A".
+        Seuls les regroupements custom (List[List[int]]) restent hors périmètre
+        (interaction avec l'heuristique de relaxation des produits croisés non
+        vérifiée) — TODO Phase D.
         """
-        assert not self.CHORDAL_DECOMPOSITION, (
-            "setup_dualization: seul le cas CHORDAL_DECOMPOSITION=False (une seule "
-            "matrice SDP) est supporté en Phase 2 — l'interaction avec la "
-            "décomposition chordale est un TODO Phase 3 (task-dynamic-conic-bundle.md)."
+        assert not isinstance(self.CHORDAL_DECOMPOSITION, list), (
+            "setup_dualization: les regroupements custom de couches "
+            "(CHORDAL_DECOMPOSITION: List[List[int]]) ne sont pas supportés — "
+            "seuls False (bloc unique) et True (grouping standard [k,k+1]) le sont. "
+            "cf. task-dynamic-conic-bundle.md, TODO Phase D."
         )
 
         self.Objective.format_obj()
@@ -495,6 +510,12 @@ class MosekClassicHandler:
 
         self._cb_dualized = []
         self._cb_saved_bounds = {}
+        # list_cstr est figée à ce stade (build_model() terminé) -- invalide le cache
+        # name->index pour forcer sa reconstruction (une seule fois, cf. _get_cb_name_to_idx)
+        # au lieu de le refaire à chaque contrainte dans la boucle ci-dessous (c'était un
+        # bug de perf en O(len(dualizable_names) * len(list_cstr)), cf. investigation
+        # mnist-9x100 -- ~200s perdus sur un modèle à ~41k contraintes RLT dualisables).
+        self._cb_name_to_idx = None
 
         for name in dualizable_names:
             entry, idx, bound_type, lb, ub = self._dualization_triplet_for(name)
@@ -508,6 +529,38 @@ class MosekClassicHandler:
             len({int(nm) for d in self._cb_dualized for nm in d["num_matrix"]}),
         )
 
+        # Diagnostic Phase A (task-dynamic-conic-bundle.md) : vérifie qu'aucune
+        # contrainte dualisable individuelle ne référence 2+ matrices (num_matrix)
+        # à la fois — attendu pour le grouping standard [k,k+1] (cf. analyse
+        # McCormick_inter_layers), pas garanti pour un grouping custom.
+        cross_block = [
+            (d["name"], sorted({int(nm) for nm in d["num_matrix"]}))
+            for d in self._cb_dualized
+            if len({int(nm) for nm in d["num_matrix"]}) > 1
+        ]
+        if cross_block:
+            logger_mosek.warning(
+                "setup_dualization: %d contrainte(s) dualisable(s) référencent "
+                "plusieurs matrices à la fois (inattendu en grouping standard) : %s",
+                len(cross_block), cross_block[:5],
+            )
+        else:
+            logger_mosek.info(
+                "setup_dualization: aucune contrainte dualisable ne référence "
+                "plusieurs matrices (confirme l'hypothèse Phase A)."
+            )
+
+    def _get_cb_name_to_idx(self) -> dict:
+        """Cache paresseux name->index sur self.Constraints.list_cstr, construit une
+        seule fois par setup_dualization() (list_cstr est figée une fois build_model()
+        terminé) -- évite de reconstruire ce dict en O(len(list_cstr)) à CHAQUE appel de
+        _dualization_triplet_for(), qui rendait setup_dualization() en O(len(dualizable_names)
+        * len(list_cstr)) au global : ~200s mesurés sur un modèle mnist-9x100 à ~41k
+        contraintes RLT dualisables (cf. investigation task-dynamic-conic-bundle.md)."""
+        if self._cb_name_to_idx is None:
+            self._cb_name_to_idx = {c["name"]: idx for idx, c in enumerate(self.Constraints.list_cstr)}
+        return self._cb_name_to_idx
+
     def _dualization_triplet_for(self, name: str):
         """
         Construit le triplet signé/normalisé en <= (cf. setup_dualization) pour la
@@ -516,7 +569,7 @@ class MosekClassicHandler:
         get_constraint_dualization_data() (lecture pure, utilisée par le mode
         dynamique pour évaluer la violation de contraintes pas encore dualisées).
         """
-        name_to_idx = {c["name"]: idx for idx, c in enumerate(self.Constraints.list_cstr)}
+        name_to_idx = self._get_cb_name_to_idx()
         assert name in name_to_idx, f"Contrainte dualisable inconnue : {name}"
         idx = name_to_idx[name]
         c = self.Constraints.list_cstr[idx]
@@ -628,8 +681,8 @@ class MosekClassicHandler:
         # violation de contraintes DUALIZABLE pas encore dualisées sur ce même X
         # (cf. DynamicConicBundleSolver._solve_dynamic / get_constraint_dualization_data),
         # donc toutes les matrices référencées par des candidates potentielles doivent
-        # être disponibles, pas seulement le sous-ensemble déjà actif. Phase 2 scope
-        # (CHORDAL_DECOMPOSITION=False) : une seule matrice, coût négligeable.
+        # être disponibles, pas seulement le sous-ensemble déjà actif. Coût négligeable
+        # même avec plusieurs blocs (CHORDAL_DECOMPOSITION=True, grouping standard).
         for num_matrix in range(self.indexes_matrices.nb_matrices):
             dim = self.indexes_matrices.get_shape_matrix(num_matrix)
             result["X"][num_matrix] = self.get_solution(ind_solution=num_matrix, dim=dim)

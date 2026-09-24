@@ -113,12 +113,14 @@ class DynamicConicBundleConfig(BaseModel):
     """Configuration de la conic bundle method (main.pdf, section 5.4). Ne prend
     effet que si un modèle SDPSolverConfig référence ce bloc via
     `dynamic_conic_bundle:`. Nécessite solver="mosek_classic" (seul backend
-    supporté en Phase 2) et CHORDAL_DECOMPOSITION=False (TODO Phase 3)."""
+    supporté). CHORDAL_DECOMPOSITION=False (bloc unique) et =True (grouping
+    standard [k,k+1]) sont supportés ; les regroupements custom
+    (List[List[int]]) ne le sont pas encore (TODO Phase D, task-dynamic-conic-bundle.md)."""
 
     enabled: bool = True
     dualize: List[str] = ["RLT"]  # Familles de coupes à dualiser (doivent être dans `cuts` et taguées ConstraintRole.DUALIZABLE)
 
-    engine: str = "python"  # "python" (bundle proximal from-scratch, src/dynamic_conic_bundle/) | "conicbundle_native" (pont direct vers la vraie librairie ConicBundle, src/miqcr_bridge/conicbundle_native/ — cf. task-dynamic-conic-bundle.md "Pivot" : converge plus vite et plus précisément, recommandé par défaut à terme mais pas encore le défaut pour ne pas casser les runs existants)
+    engine: str = "conicbundle_native"  # "python" (bundle proximal from-scratch, src/dynamic_conic_bundle/) | "conicbundle_native" (pont direct vers la vraie librairie ConicBundle, src/miqcr_bridge/conicbundle_native/ — cf. task-dynamic-conic-bundle.md "Pivot" : converge plus vite et plus précisément, recommandé par défaut à terme mais pas encore le défaut pour ne pas casser les runs existants)
 
     @validator("engine")
     def validate_engine(cls, v):
@@ -132,6 +134,14 @@ class DynamicConicBundleConfig(BaseModel):
     # Paramètres spécifiques à engine="conicbundle_native" (ignorés par engine="python") :
     term_relprec: float = 1.0e-7  # Critère d'arrêt de la vraie ConicBundle (cb_set_term_relprec) : arrête quand la progression prédite est sous term_relprec*(|objectif|+1)
     eval_limit: int = 5000  # Nb max d'appels à l'oracle (cb_set_eval_limit) — indépendant de max_iter qui ne borne que les pas de descente ; un pas de descente peut englober plusieurs pas nuls/appels oracle
+    print_level: int = 0  # Verbosité interne de la vraie ConicBundle (cb_set_print_level). 0 = silencieux (hors résumé final), >=1 = trace native par itération.
+    log_every: int = 0  # Fréquence (en appels oracle) du print Python de suivi (h courant / meilleur h, cf. cb_wrapper.solve_native_conicbundle_dual) — 0 = jamais. Sur un run long (des heures), mettre par ex. 10-50 pour avoir une trace de progression dans run.log.
+
+    @validator("factor")
+    def validate_factor(cls, v):
+        if v is not None and not (0.0 < v <= 1.0):
+            raise ValueError(f"factor doit être dans ]0, 1] (proportion des contraintes dualisables), reçu {v}.")
+        return v
 
     @validator("dualize")
     def validate_dualize(cls, v):
@@ -152,9 +162,20 @@ class DynamicConicBundleConfig(BaseModel):
     theta_drop_tol: float = 1.0e-8  # Mode dynamique seulement : retire une contrainte active si |theta_r| < ce seuil (theta = notation main.pdf, sans rapport avec alpha-CROWN)
     add_batch_size: int = 50  # Mode dynamique seulement : nb de contraintes les plus violées ajoutées par round
     max_rounds: int = 100  # Mode dynamique seulement : nb max de rounds (ajout/retrait) — pas de limite propre sinon, contrairement à max_iter qui ne borne que la boucle interne par round
-    max_bundle_size: Optional[int] = None  # Nb max de coupes conservées dans le bundle (FIFO). None = pas de cap (borné naturellement par max_iter) — recommandé, cf. task-dynamic-conic-bundle.md "Analyse statique vs dynamique" (cap trop petit face à dim(theta) = arrêt prématuré). Fixer un entier pour borner le coût du master problem QP à grande échelle.
+    max_bundle_size: Optional[int] = None  # Nb max de coupes conservées dans le bundle. None = comportement par défaut de chaque moteur : pour engine="python", pas de cap (borné naturellement par max_iter) — recommandé, cf. task-dynamic-conic-bundle.md "Analyse statique vs dynamique" (cap trop petit face à dim(theta) = arrêt prématuré), éviction FIFO (cf. ProximalBundle) ; pour engine="conicbundle_native", défaut interne de la vraie librairie = 50 (constante codée en dur, FunctionProblem::FunctionProblem dans funproblem.cxx), éviction/agrégation interne à la librairie une fois le plafond atteint. Fixer un entier pour borner le coût du master problem QP à grande échelle (au prix d'une convergence potentiellement plus lente/moins précise si le cap est trop petit).
+    factor: Optional[float] = None  # Équivalent du paramètre FACTOR de la librairie MIQCR d'origine (Miqcr-1.0_.../src/parameters.h, "Proportion of the considered constraints into the SDP solver"), transposé ici à nos contraintes DUALIZABLE (RLT) plutôt qu'aux McCormick internes de MIQCR. Ignoré si max_bundle_size est déjà fourni explicitement (max_bundle_size a toujours priorité). Sinon, si factor n'est pas None, max_bundle_size = max(1, round(factor * nb_contraintes_dualizable)), calculé une fois le modèle construit (les deux moteurs "python" et "conicbundle_native" le supportent). Doit être dans ]0, 1].
+    max_new_subgradients: Optional[int] = None  # engine="conicbundle_native" uniquement (ignoré par engine="python", qui ne renvoie jamais plus d'un sous-gradient par évaluation) : nb max de nouveaux sous-gradients epsilon renvoyés par appel oracle (cb_set_max_new_subgradients). None = défaut interne de la librairie = 5 (funproblem.cxx).
     log_theta_every_n_iter: int = 1  # Fréquence (en itérations) d'enregistrement de theta_history (0 = jamais)
     print_png: bool = False  # Si true, écrit un PNG de diagnostic par résolution (h(theta)/u/taille du bundle vs itération, cf. dynamic_conic_bundle/plotting.py) dans le dossier du run. Désactivé par défaut (coût I/O/matplotlib non négligeable sur un run à des centaines d'échantillons).
+
+    stop_when_positive: bool = True  # Arrête le bundle dès qu'une évaluation de h(theta) (n'importe quel point oracle, y compris pas nuls) dépasse positivity_threshold : une seule borne duale valide strictement positive suffit à certifier la robustesse (dualité faible), inutile de continuer à affiner theta. status="reached_positivity" dans results_conic_bundle.csv. Supporté par les deux moteurs ("python" et "conicbundle_native").
+    positivity_threshold: float = 1.0e-6  # Seuil utilisé par stop_when_positive.
+
+    @validator("positivity_threshold")
+    def validate_positivity_threshold(cls, v):
+        if v <= 0:
+            raise ValueError(f"positivity_threshold doit être strictement positif, reçu {v}.")
+        return v
 
 
 class SDPSolverConfig(BaseModel):
