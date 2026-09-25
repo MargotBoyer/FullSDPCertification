@@ -148,54 +148,49 @@ class ConstraintsClassic(CommonConstraints):
     def add_to_task(self):
         """
         Add the constraint to the task.
+
+        Chargée en 2 appels MOSEK batch (putbarablocktriplet + putconboundlist) au lieu
+        d'un appel par contrainte -- les deux API MOSEK acceptent nativement des tableaux
+        couvrant plusieurs (ou toutes les) contraintes à la fois (subi n'est pas limité à
+        une seule contrainte par appel, cf. doc mosek.Task.putbarablocktriplet), donc
+        appeler 44507 fois avec une seule contrainte à chaque fois n'apportait rien
+        d'utile -- juste de l'overhead d'appel (mesuré ~0.67s de temps propre sous
+        cProfile sur mnist-9x100, cf. investigation temps de processing hors résolution SDP).
         """
-        print(f"CALLBACK : Number of constraints : {len(self.list_cstr)}")
-        logger_mosek.info(f"Adding {len(self.list_cstr)} constraints to the task...")
-        for ind_cstr in range(len(self.list_cstr)):
-            name = self.list_cstr[ind_cstr]["name"]
-            # if ind_cstr % 10000 == 0:
-            #     print(
-            #         f"CALLBACK : Adding constraint {ind_cstr} / {len(self.list_cstr)} : {name}"
-            #     )
-            # elif ind_cstr >= int(0.99 * len(self.list_cstr)) and ind_cstr % 100 == 0:
-            #     print(
-            #         f"CALLBACK : Adding constraint {ind_cstr} / {len(self.list_cstr)} : {name}"
-            #     )
-            # elif ind_cstr >= int(0.9995 * len(self.list_cstr)):
-            #     print(
-            #         f"CALLBACK : Adding constraint {ind_cstr} / {len(self.list_cstr)} : {name}"
-            #     )
-            i = self.list_cstr[ind_cstr]["i"]
-            j = self.list_cstr[ind_cstr]["j"]
-            num_matrix = self.list_cstr[ind_cstr]["num_matrix"]
-            value = self.list_cstr[ind_cstr]["value"]
-            if self.verbose :
-                print(
-                    f"Adding to task constraint {name} with num matrix: {num_matrix.size} , i= {i.size}, j = {j.size}, value = {value.size}"
-                )
+        n = len(self.list_cstr)
+        print(f"CALLBACK : Number of constraints : {n}")
+        logger_mosek.info(f"Adding {n} constraints to the task...")
+
+        for ind_cstr, c in enumerate(self.list_cstr):
             assert (
-                len(num_matrix) == len(i) == len(j) == len(value)
-            ), "The length of num_matrix, i, j, and value must be the same."
-
-            self.task.putbarablocktriplet(
-                ind_cstr
-                * np.ones(len(self.list_cstr[ind_cstr]["num_matrix"]), dtype=np.int32),
-                self.list_cstr[ind_cstr]["num_matrix"],
-                self.list_cstr[ind_cstr]["i"],
-                self.list_cstr[ind_cstr]["j"],
-                self.list_cstr[ind_cstr]["value"],
+                len(c["num_matrix"]) == len(c["i"]) == len(c["j"]) == len(c["value"])
+            ), (
+                f"The length of num_matrix, i, j, and value must be the same "
+                f"(constraint {ind_cstr}: {c['name']})."
             )
-            self.task.putconbound(
-                ind_cstr,
-                self.list_cstr[ind_cstr]["bound_type"],
-                self.list_cstr[ind_cstr]["lb"],
-                self.list_cstr[ind_cstr]["ub"],
-            )
+            if self.verbose:
+                print(
+                    f"Adding to task constraint {c['name']} with num matrix: "
+                    f"{c['num_matrix'].size} , i= {c['i'].size}, j = {c['j'].size}, "
+                    f"value = {c['value'].size}"
+                )
 
-            # if ind_cstr >= int(0.9995 * len(self.list_cstr)):
-            #     print(
-            #         f"CALLBACK : constraint {ind_cstr} / {len(self.list_cstr)} : {name} successfully addded to the task."
-            #     )
-            
-           
+        if n > 0:
+            subi_all = np.concatenate([
+                np.full(len(c["num_matrix"]), ind_cstr, dtype=np.int32)
+                for ind_cstr, c in enumerate(self.list_cstr)
+            ])
+            subj_all = np.concatenate([c["num_matrix"] for c in self.list_cstr])
+            subk_all = np.concatenate([c["i"] for c in self.list_cstr])
+            subl_all = np.concatenate([c["j"] for c in self.list_cstr])
+            val_all = np.concatenate([c["value"] for c in self.list_cstr])
+            self.task.putbarablocktriplet(subi_all, subj_all, subk_all, subl_all, val_all)
+
+        self.task.putconboundlist(
+            np.arange(n, dtype=np.int32),
+            [c["bound_type"] for c in self.list_cstr],
+            [c["lb"] for c in self.list_cstr],
+            [c["ub"] for c in self.list_cstr],
+        )
+
         logger_mosek.debug("All constraints added to the task.")
