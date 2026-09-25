@@ -136,6 +136,8 @@ class DynamicConicBundleConfig(BaseModel):
     eval_limit: int = 5000  # Nb max d'appels à l'oracle (cb_set_eval_limit) — indépendant de max_iter qui ne borne que les pas de descente ; un pas de descente peut englober plusieurs pas nuls/appels oracle
     print_level: int = 0  # Verbosité interne de la vraie ConicBundle (cb_set_print_level). 0 = silencieux (hors résumé final), >=1 = trace native par itération.
     log_every: int = 0  # Fréquence (en appels oracle) du print Python de suivi (h courant / meilleur h, cf. cb_wrapper.solve_native_conicbundle_dual) — 0 = jamais. Sur un run long (des heures), mettre par ex. 10-50 pour avoir une trace de progression dans run.log.
+    active_bounds_fixing: bool = True  # cb_set_active_bounds_fixing -- recommandé par cb_cinterface.h pour la relaxation lagrangienne mais documenté "no convergence theory". Écarté empiriquement comme cause des échecs "upper bound < lower bound" (résultats identiques avec false) -- gardé configurable pour référence.
+    max_subg_by_point: int = 10  # Nb max de sous-gradients epsilon renvoyés par appel oracle QUAND un "coin" est détecté (dégénérescence du X* optimal MOSEK, cf. cb_wrapper.solve_native_conicbundle_dual) -- adresse directement les échecs "upper bound < lower bound" observés en dualisant beaucoup de contraintes (RLT+ReLU_quad+triangularization/ReLU_linear) : un seul sous-gradient n'est représentatif que d'une direction quand le sous-problème résiduel a plusieurs X* optimaux très différents. 1 = désactive l'enrichissement (comportement historique).
 
     @validator("factor")
     def validate_factor(cls, v):
@@ -146,11 +148,15 @@ class DynamicConicBundleConfig(BaseModel):
     @validator("dualize")
     def validate_dualize(cls, v):
         for family in v:
-            if family not in ["RLT"]:
+            if family not in ["RLT", "ReLU_quad", "ReLU_linear", "triangularization"]:
                 raise ValueError(
-                    f"Famille de coupes '{family}' non dualisable en Phase 2 (seule 'RLT' est "
-                    "taguée ConstraintRole.DUALIZABLE pour l'instant — voir tableau Phase 1 "
-                    "de task-dynamic-conic-bundle.md pour les candidates Phase 3+)."
+                    f"Famille de coupes '{family}' non dualisable — familles taguées "
+                    "ConstraintRole.DUALIZABLE (cf. Constraints.mark_current_dualizable) : "
+                    "'RLT' (McCormick_inter_layers), 'ReLU_quad' (l'équation quadratique "
+                    "z_k*(z_k - W z_(k-1) - b_k) = 0), 'ReLU_linear' (z_k>=0 et "
+                    "z_k>=W z_(k-1)+b_k, ReLU_constraint_Lan) et 'triangularization' "
+                    "(ReLU_triangularization). quad_bounds, first_term_equal_zero et la "
+                    "cohérence chordale (CHORDAL_DECOMPOSITION_rec) restent toujours dures."
                 )
         return v
 

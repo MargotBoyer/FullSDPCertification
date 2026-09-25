@@ -262,7 +262,7 @@ class Indexes_Mosek_Solver:
                 [
                     (k, j)
                     for k, j in (
-                        self.stable_inactives_neurons + self.stable_actives_neurons
+                        self.stable_inactives_neurons | self.stable_actives_neurons
                     )
                     if k == layer and j < neuron
                 ]

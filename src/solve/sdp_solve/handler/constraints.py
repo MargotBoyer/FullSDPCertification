@@ -133,9 +133,6 @@ class CommonConstraints(VariablesCall):
                     f"Indexes i and j are not sorted in the current constraint {name} : i = {i} and j = {j} \n"
                 )
 
-            logger_mosek.info(
-                f"Current constraint {self.current_num_constraint} is valid."
-            )
             if any(
                 el == 0 for el in self.list_cstr[self.current_num_constraint]["value"]
             ):
@@ -290,7 +287,6 @@ class CommonConstraints(VariablesCall):
         )
 
         # print("Creating new constraint : ", name)
-        logger_mosek.info("Creating new constraint")
         if name in self.cstr_names:
             existing = next(c for c in self.list_cstr if c["name"] == name)
             if existing["label"] != "same_for_data":
@@ -324,6 +320,7 @@ class CommonConstraints(VariablesCall):
                 "is_quadratic": False,
                 "not_in_miqcr": False,
                 "role": ConstraintRole.HARD,
+                "dualizable_family": None,
             }
         )
         # print(f"Creating new constraint {self.current_num_constraint} : {name}")
@@ -333,14 +330,19 @@ class CommonConstraints(VariablesCall):
         """Marque la contrainte courante comme redondante pour MIQCR (déjà générée en interne)."""
         self.list_cstr[self.current_num_constraint]["not_in_miqcr"] = True
 
-    def mark_current_dualizable(self):
+    def mark_current_dualizable(self, family: str):
         """Marque la contrainte courante comme éligible à la dualisation par la
         dynamic conic bundle method (cf. src/dynamic_conic_bundle/). N'a aucun effet
         sur un run SDP classique : la contrainte reste poussée dans le task MOSEK
         par add_to_task() tant qu'aucun DynamicConicBundleSolver ne la désactive
         explicitement via resolve_dualized().
+
+        `family` (ex. "RLT", "ReLU_quad") est le nom utilisé côté yaml dans
+        `dynamic_conic_bundle.dualize` (DynamicConicBundleConfig) pour choisir quelles
+        familles dualiser réellement — cf. sdp_generic_solver.get_dualizable_constraint_names(families=...).
         """
         self.list_cstr[self.current_num_constraint]["role"] = ConstraintRole.DUALIZABLE
+        self.list_cstr[self.current_num_constraint]["dualizable_family"] = family
 
     def first_term_equal_zero(self, num_matrices):
         """

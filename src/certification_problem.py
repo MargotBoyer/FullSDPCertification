@@ -417,6 +417,7 @@ class Certification_Problem:
             max_bundle_size=cb_config.max_bundle_size,
             factor=cb_config.factor,
             log_theta_every_n_iter=cb_config.log_theta_every_n_iter,
+            dualize_families=cb_config.dualize,
             stop_when_positive=cb_config.stop_when_positive,
             positivity_threshold=cb_config.positivity_threshold,
             verbose=True,
@@ -458,7 +459,7 @@ class Certification_Problem:
         t0 = time.time()
         try:
             model_instance.build_model(cuts)
-            dualizable_names = model_instance.get_dualizable_constraint_names()
+            dualizable_names = model_instance.get_dualizable_constraint_names(cb_config.dualize)
             # handler_classic.initiate_env() enregistre inconditionnellement un
             # InfoCallback MOSEK très verbeux (non lié à use_callback) — le silencer
             # accélère fortement chaque résolution (aucun effet sur le résultat
@@ -483,6 +484,8 @@ class Certification_Problem:
                 png_title=f"{self.network_name} data_index={data_index} target={ytarget} (native)",
                 stop_when_positive=cb_config.stop_when_positive,
                 positivity_threshold=cb_config.positivity_threshold,
+                active_bounds_fixing=cb_config.active_bounds_fixing,
+                max_subg_by_point=cb_config.max_subg_by_point,
             )
             status = cb_status or "optimal"
         except Exception as e:
@@ -653,11 +656,14 @@ class Certification_Problem:
                 print(f"[conic bundle] data_index={i} target={ytarget} optimal_value={lb} "
                       f"n_iter={n_iter_cb} ({elapsed:.2f}s)")
 
-                if ytarget is not None and lb is not None and lb >= 0:
-                    # Même heuristique que SDPSolver.solve() classique : on arrête la
-                    # recherche sur les autres cibles dès qu'une résolution robuste
-                    # est trouvée pour la cible courante.
-                    break
+                # Pas de break ici : contrairement à SDPSolverConfig.solve() (classique),
+                # run_conic_bundle ne balaie qu'un seul RLT_prop/jeu de coupes (pas de boucle
+                # interne à interrompre) -- le break qui existait ici cassait directement la
+                # boucle `for ytarget in targets`, ce qui est incorrect : la robustesse d'un
+                # data_index exige que TOUTES les cibles soient certifiées (lb>=0), pas une
+                # seule. Toutes les cibles doivent être résolues et obtenir une ligne dans
+                # results_conic_bundle.csv, comme le fait la boucle ytarget du chemin classique
+                # (qui elle-même ne casse jamais sur ytarget, seulement sur RLT_prop en interne).
 
     def solve(self, title_run: str = "", start: int = None, end: int = None, skip_indices: set = None, skip_pairs: set = None, resume: bool = False, include_indices: set = None) -> None:
         print("Starting certification problem solving ...", flush=True)

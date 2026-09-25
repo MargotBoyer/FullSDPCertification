@@ -289,11 +289,11 @@ def check_stability_neurons(
     logger.debug("Checking stability of neurons ...")
     logger.debug("stable use_active_neurons: ", use_active_neurons)
     logger.debug("stable use_inactive_neurons: ", use_inactive_neurons)
-    self.stable_inactives_neurons = []
-    self.stable_actives_neurons = []
+    self.stable_inactives_neurons = set()
+    self.stable_actives_neurons = set()
     # Check if the neurons are stable
     for k in range(1, self.K):
-        
+
         for j in range(self.n[k]):
             # print(
             #     "STUDY : Layer ",
@@ -306,16 +306,16 @@ def check_stability_neurons(
             #     self.U[k][j],
             # )
             if self.L[k][j] <= 0 and self.U[k][j] <= 0 and not use_inactive_neurons:
-                self.stable_inactives_neurons.append((k, j))
+                self.stable_inactives_neurons.add((k, j))
             elif self.L[k][j] >= 0 and self.U[k][j] > 0 and not use_active_neurons:
                 if (k==self.K - 1 and self.keep_penultimate_actives) :
                     continue
                 if (k==1) and len(self.pruned_input_neurons) > 0:
                     continue  # expansion of stable actives at k=1 may reference pruned z_0 neurons
-                if k > self.ultimate_layer_use_active_neurons: 
+                if k > self.ultimate_layer_use_active_neurons:
                     continue
-                else : 
-                    self.stable_actives_neurons.append((k, j))
+                else :
+                    self.stable_actives_neurons.add((k, j))
     self.stable_active_neurons = set(self.stable_actives_neurons)
     self.stable_inactive_neurons = set(self.stable_inactives_neurons)
     print(

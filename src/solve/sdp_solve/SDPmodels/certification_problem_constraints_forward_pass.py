@@ -113,6 +113,7 @@ def ReLU_constraint_Lan(
                 bound_type=mosek.boundkey.lo,
                 bound=0,
             )
+            self.handler.Constraints.mark_current_dualizable("ReLU_linear")
 
             # zk >= Wk zk-1 + bk
             if k == 1 and not self.INPUT_IN_VARIABLES:
@@ -156,6 +157,7 @@ def ReLU_constraint_Lan(
                 bound_type=mosek.boundkey.lo,
                 bound=self.b[k - 1][j] + relu_bound_adj,
             )
+            self.handler.Constraints.mark_current_dualizable("ReLU_linear")
 
             # zk * (zk - Wk zk-1 - bk) = 0
             has_pruned_at_prev = (k == 1 and len(self.pruned_input_neurons) > 0)
@@ -215,6 +217,7 @@ def ReLU_constraint_Lan(
                 self.handler.Constraints.add_bound(
                     bound_type=mosek.boundkey.fx, bound=0
                 )
+                self.handler.Constraints.mark_current_dualizable("ReLU_quad")
 
 
 def ReLU_triangularization(self):
@@ -296,6 +299,7 @@ def ReLU_triangularization(self):
                 + k_cst * (self.network.b[k - 1][j] - self.handler.Constraints.L[k][j])
                 + tri_bound_adj,
             )
+            self.handler.Constraints.mark_current_dualizable("triangularization")
 
             # self.handler.Constraints.print_current_constraint()
 

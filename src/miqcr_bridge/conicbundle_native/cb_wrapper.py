@@ -202,6 +202,7 @@ def solve_native_conicbundle_dual(
     png_title: Optional[str] = None,
     stop_when_positive: bool = True,
     positivity_threshold: float = 1e-6,
+    max_subg_by_point: int = 10,
 ) -> Tuple[float, Dict[str, float], int, Optional[str]]:
     """
     Maximise h(theta) = min_{X faisable, contraintes `dualizable_names` relaxees}
@@ -272,6 +273,30 @@ def solve_native_conicbundle_dual(
     certifie deja la robustesse : inutile de continuer a affiner theta. Dans ce cas
     stop_reason="reached_positivity" est renvoye (4e element du tuple), sinon None.
 
+    max_subg_by_point : nombre max de sous-gradients epsilon renvoyes par appel oracle
+    QUAND un "coin" (degenerescence du X* optimal) est detecte a ce point -- cf.
+    l'investigation "ReLU_linear/triangularization + RLT + ReLU_quad" (task-dynamic-conic-bundle.md) :
+    une fois trop de contraintes dualisees simultanement, le sous-probleme MOSEK residuel
+    admet plusieurs X* optimaux tres differents, et le sous-gradient extrait d'un seul X*
+    n'est representatif que d'UNE direction -- la vraie derivee directionnelle de h est un
+    max sur TOUT le sous-differentiel (l'enveloppe convexe des sous-gradients obtenables en
+    balayant les X* optimaux), pas un seul point. cb_cinterface.h supporte nativement le
+    renvoi de plusieurs sous-gradients "epsilon" par appel oracle (max_subg en entree, jamais
+    exploite avant ce parametre -- l'oracle renvoyait toujours n_subgrads=1).
+
+    Detection du "coin" : une sonde bon marche (1 resolution supplementaire a theta perturbe
+    de facon infinitesimale) compare son sous-gradient a celui du point principal. Si l'ecart
+    relatif depasse un seuil (5%), le point est considere degenere : on enrichit alors avec
+    max_subg_by_point-2 sous-gradients supplementaires (perturbations aleatoires independantes
+    de theta), chacun via une resolution MOSEK complete -- cout proportionnel a
+    max_subg_by_point UNIQUEMENT sur les points detectes degeneres (cout d'1 resolution
+    supplementaire partout ailleurs, pour la sonde). Chaque sous-gradient supplementaire est
+    exact (pas approxime) : obtenu par resolve_dualized(theta') a un theta' reellement proche
+    de theta, sa coupe affine est valide globalement (inegalite de sur-gradient standard pour
+    h concave), evaluee au point theta demande par la librairie (cf. subg_values dans
+    cb_cinterface.h : "store for each epsilon subgradient the value at the argument").
+    max_subg_by_point=1 desactive l'enrichissement (comportement historique).
+
     Retourne (h_best, theta_best, n_descent_steps, stop_reason).
     """
     lib = _load_lib(so_path)
@@ -301,6 +326,7 @@ def solve_native_conicbundle_dual(
 
     best = {"h": -np.inf, "theta": None}
     state = {"n_calls": 0}
+    rng = np.random.default_rng()
 
     bundlesize_c = ctypes.c_int(0)
     new_subgrads_c = ctypes.c_int(0)
@@ -376,10 +402,47 @@ def solve_native_conicbundle_dual(
             n_serious_history.append(n_serious_box["n"])
 
         objective_value_p[0] = -h_val
-        n_subgrads_p[0] = 1
-        subg_values_p[0] = -h_val
-        for r in range(m):
-            subgradients_p[r] = -g[r]
+
+        # --- Enrichissement multi-sous-gradients si on detecte un "coin" ---
+        # subgrads : liste de (h_i, g_i, theta_i) -- theta_i le point ou (h_i,g_i) est exact.
+        subgrads = [(h_val, g, theta_arr.copy())]
+        k_max = min(max_subg, max_subg_by_point)
+        if k_max > 1:
+            probe_delta = 1e-6 * (1.0 + np.abs(theta_arr))
+            probe_theta_arr = theta_arr + probe_delta * rng.choice([-1.0, 1.0], size=m)
+            probe_theta = {names[r]: float(probe_theta_arr[r]) for r in range(m)}
+            probe_res = handler.resolve_dualized(probe_theta)
+            if probe_res["lb_value"] is not None:
+                probe_g = np.array([_dualized_inner_product(d, probe_res["X"]) - d["rhs"] for d in dualized])
+                rel_disagreement = np.linalg.norm(probe_g - g) / (np.linalg.norm(g) + 1e-12)
+                subgrads.append((probe_res["lb_value"], probe_g, probe_theta_arr))
+
+                if rel_disagreement > 0.05:
+                    # Coin detecte (le sous-gradient a saute pour un pas infinitesimal) --
+                    # on enrichit avec des points supplementaires perturbes independamment.
+                    if log_every:
+                        print(f"  [cb_native oracle #{state['n_calls']}] coin detecte "
+                              f"(ecart sous-gradient={rel_disagreement:.3f}) -- enrichissement "
+                              f"a {k_max} sous-gradients", flush=True)
+                    for _ in range(k_max - 2):
+                        extra_delta = 1e-6 * (1.0 + np.abs(theta_arr))
+                        extra_theta_arr = theta_arr + extra_delta * rng.uniform(-1.0, 1.0, size=m)
+                        extra_theta = {names[r]: float(extra_theta_arr[r]) for r in range(m)}
+                        extra_res = handler.resolve_dualized(extra_theta)
+                        if extra_res["lb_value"] is None:
+                            continue
+                        extra_g = np.array([_dualized_inner_product(d, extra_res["X"]) - d["rhs"] for d in dualized])
+                        subgrads.append((extra_res["lb_value"], extra_g, extra_theta_arr))
+
+        n_subgrads_p[0] = len(subgrads)
+        for i, (h_i, g_i, theta_i_arr) in enumerate(subgrads):
+            # Valeur de la coupe affine (h_i, g_i) -- exacte en theta_i -- evaluee au point
+            # theta effectivement demande par la librairie (arg_p), cf. cb_cinterface.h.
+            diff = theta_arr - theta_i_arr
+            cut_value_at_theta = h_i + float(np.dot(g_i, diff))
+            subg_values_p[i] = -cut_value_at_theta
+            for r in range(m):
+                subgradients_p[i * m + r] = -g_i[r]
         return 0
 
     oracle_cb = CB_FUNCTION_TYPE(oracle)

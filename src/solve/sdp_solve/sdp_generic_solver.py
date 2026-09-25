@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List
+from typing import List, Optional
 import torch
 from networks import ReLUNN
 import mosek
@@ -312,16 +312,22 @@ class SDPSolver(Solver):
         end_pretreatment_time = time.time()
         self.handler.time_pretreatment = end_pretreatment_time - start_pretreatment_time
 
-    def get_dualizable_constraint_names(self) -> List[str]:
+    def get_dualizable_constraint_names(self, families: Optional[List[str]] = None) -> List[str]:
         """
         Names of the constraints tagged ConstraintRole.DUALIZABLE in the model built
         by build_model() — the candidate pool DynamicConicBundleSolver can dualize
         (in full for the static algorithm, or a growing subset for the dynamic one).
+
+        `families` : sous-ensemble de noms de famille (cf. Constraints.mark_current_dualizable,
+        ex. "RLT", "ReLU_quad") à retenir — None (défaut) retient toutes les familles
+        dualisables taguées dans le modèle. Filtre réellement `dynamic_conic_bundle.dualize`
+        (DynamicConicBundleConfig), passé ici par l'appelant (certification_problem.py).
         """
         from .handler.constraints import ConstraintRole
         return [
             c["name"] for c in self.handler.Constraints.list_cstr
             if c.get("role") == ConstraintRole.DUALIZABLE
+            and (families is None or c.get("dualizable_family") in families)
         ]
 
     def setup_dualization(self, dualizable_names: List[str]):

@@ -16,7 +16,7 @@ from .variable_elements import (
     _get_key_linear_,
 )
 import logging
-from typing import List
+from typing import List, Set
 from collections import Counter
 from numba import njit
 import numba
@@ -45,8 +45,8 @@ class LayersValues:
         n: List[int],
         W: list,
         b: list,
-        stable_inactives_neurons: List[tuple] = [],
-        stable_actives_neurons: List[tuple] = [],
+        stable_inactives_neurons: Set[tuple] = frozenset(),
+        stable_actives_neurons: Set[tuple] = frozenset(),
         L: List[List[float]] = None,
         U: List[List[float]] = None,
         **kwargs,
@@ -171,7 +171,7 @@ class LayersValues:
         Check if the neuron is a stable active neuron.
         """
         return (layer, neuron) not in (
-            self.stable_actives_neurons + self.stable_inactives_neurons
+            self.stable_actives_neurons | self.stable_inactives_neurons
         ) and (layer is not None and neuron is not None)
 
     def is_stable_active(self, layer: int, neuron: int) -> bool:

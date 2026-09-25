@@ -12,7 +12,15 @@ from .run_benchmark import concat_dataframes_with_missing_columns
 
 
 logger_mosek = logging.getLogger("Mosek_logger")
-logger_mosek.setLevel(logging.DEBUG)
+# WARNING (pas DEBUG) : logger_mosek.info()/.debug() sont appelés ~44500 fois chacun
+# pendant la construction des contraintes (une fois par contrainte, cf. new_constraint/
+# check_current_constraint dans handler/constraints.py) -- FileHandler.emit() flush le
+# disque à CHAQUE appel (comportement par défaut de StreamHandler), ce qui mesurait
+# ~1.4s de temps propre (LogRecord + flush) sur le prétraitement mnist-9x100 (cf.
+# investigation temps de processing hors résolution SDP). Les messages INFO/DEBUG
+# perdus n'apportaient pas de diagnostic utile (aucun contexte dans le message) ; les
+# warnings/erreurs restent journalisés normalement.
+logger_mosek.setLevel(logging.WARNING)
 logger_mosek.propagate = False
 handler = logging.FileHandler(get_project_path("results/Mosek_logger.log"))
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")

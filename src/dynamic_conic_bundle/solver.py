@@ -71,6 +71,7 @@ class DynamicConicBundleSolver:
         add_batch_size: int = 50,
         max_rounds: int = 100,
         log_theta_every_n_iter: int = 1,
+        dualize_families: Optional[List[str]] = None,
         stop_when_positive: bool = True,
         positivity_threshold: float = 1e-6,
         verbose: bool = False,
@@ -156,6 +157,11 @@ class DynamicConicBundleSolver:
             garantie convergée sur l'ensemble des contraintes dualisables).
         log_theta_every_n_iter : int
             Fréquence (en itérations) d'enregistrement dans theta_history (0 = jamais).
+        dualize_families : Optional[List[str]]
+            Sous-ensemble de familles DUALIZABLE (cf. Constraints.mark_current_dualizable,
+            ex. ["RLT"], ["RLT", "ReLU_quad"]) à effectivement dualiser — None (défaut)
+            dualise toutes les familles taguées dans le modèle. Correspond à
+            `dynamic_conic_bundle.dualize` côté yaml (DynamicConicBundleConfig).
         stop_when_positive : bool
             Si True (défaut), arrête le bundle (round courant + mode dynamique) dès
             qu'un h(theta) évalué (au centre initial d'un round ou après un pas
@@ -184,6 +190,7 @@ class DynamicConicBundleSolver:
         self.add_batch_size = add_batch_size
         self.max_rounds = max_rounds
         self.log_theta_every_n_iter = log_theta_every_n_iter
+        self.dualize_families = dualize_families
         self.stop_when_positive = stop_when_positive
         self.positivity_threshold = positivity_threshold
         self.stop_reason: Optional[str] = None
@@ -353,7 +360,7 @@ class DynamicConicBundleSolver:
         """Construit le modèle et lance l'algorithme statique ou dynamique.
         Retourne la borne inférieure certifiée finale."""
         self.sdp_solver.build_model(self.cuts)
-        all_dualizable = self.sdp_solver.get_dualizable_constraint_names()
+        all_dualizable = self.sdp_solver.get_dualizable_constraint_names(self.dualize_families)
 
         if not all_dualizable:
             logger_cb.warning(

@@ -151,7 +151,7 @@ models :
     keep_penultimate_actives : true
     bounds_method: "from_file"
     bounds_file : "data/bounds/9x100-0.026_linf.csv"
-    solver_time_limit: 2   # dparam MOSEK optimizer_max_time -- appliqué au task réutilisé par resolve_dualized() à CHAQUE itération du bundle, donc plafonne bien chaque résolution SDP individuelle (pas cumulatif)
+    solver_time_limit: 120   # dparam MOSEK optimizer_max_time -- appliqué au task réutilisé par resolve_dualized() à CHAQUE itération du bundle (pas cumulatif). 2s (valeur testée plus tôt) est intenable sur ce réseau -- une résolution réelle prend ~17-30s selon la config de dualisation, voire plus sur les cas limites (~90-140s observés) ; 120s laisse assez de marge pour converger proprement plutôt que de retourner status="time_limit" avec une valeur non fiable.
     dynamic_conic_bundle:
       enabled: true
       dualize: ["RLT"]
