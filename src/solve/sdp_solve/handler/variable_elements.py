@@ -61,6 +61,41 @@ def _get_layer_neuron_from_key_(key: int, M: int = big_M_cst):
     return layer, neuron
 
 
+# ---------------------------------------------------------------------------
+# Equivalents Python purs des fonctions ci-dessus, pour les sites d'appel qui
+# ne sont PAS eux-memes dans une boucle @numba.njit (ex. les methodes Python
+# de Equivalent_Neurons_Index/ElementsinConstraintsObjectives appelees une par
+# une depuis add_linear_variable/add_quad_variable). Sur un appel isole, le
+# dispatch numba (verification/boxing des types d'arguments a chaque appel,
+# cf. numba/core/types/abstract.py __call__/__hash__/__eq__) coute largement
+# plus que le calcul lui-meme (2 multiplications + 1 addition) -- mesure a
+# ~1s cumule sous cProfile sur mnist-9x100 (cf. investigation temps de
+# processing hors resolution SDP). Les versions @numba.njit ci-dessus restent
+# utilisees telles quelles a l'interieur des boucles deja compilees
+# (_add__co, _add_ni, _add_from_key, add_dict_linear_to_elements,
+# add_dict_quad_to_elements, _decode_elements_numba_co) ou elles beneficient
+# reellement de la compilation.
+def _get_key_quad_py(i, j, num_matrix, nb_index, M: int = big_M_cst):
+    return (i + 1) * nb_index * M + (j + 1) * M + num_matrix
+
+
+def _get_quad_indices_from_key_py(index, nb_index, M: int = big_M_cst):
+    i = (index // (nb_index * M)) - 1
+    j = ((index // M) % nb_index) - 1
+    num_matrix = index % M
+    return i, j, num_matrix
+
+
+def _get_key_from_layer_neuron_py(layer: int, neuron: int, M: int = big_M_cst):
+    return (neuron + 1) * M + layer
+
+
+def _get_linear_indices_from_key_py(key: int, M: int = big_M_cst):
+    i = (key // M) - 1
+    num_matrix = key % M
+    return i, num_matrix
+
+
 # ********************************************************************************************************************************
 # ********************************************************************************************************************************
 # ********************************************************************************************************************************
@@ -121,10 +156,10 @@ class ElementsinConstraintsObjectives:
         )
 
     def get_key(self, i, j, num_matrix):
-        return _get_key_quad_(i, j, num_matrix, self.nb_index)
+        return _get_key_quad_py(i, j, num_matrix, self.nb_index)
 
     def get_i_j_num_matrix_from_key(self, index):
-        return _get_quad_indices_from_key(index, self.nb_index)
+        return _get_quad_indices_from_key_py(index, self.nb_index)
 
     def add(self, i, j, num_matrix, value):
         _add__co(i, j, num_matrix, value, self.nb_index, self.elements)
@@ -177,14 +212,14 @@ class Equivalent_Neurons_Index:
         self.equivalent_neurons = {}
 
     def get_index(self, layer: int, neuron: int):
-        return _get_key_from_layer_neuron_(layer=layer, neuron=neuron, M=self.M)
+        return _get_key_from_layer_neuron_py(layer=layer, neuron=neuron, M=self.M)
 
     def create_dict(self, layer: int, neuron: int, K : int, LAST_LAYER : bool, decomposed_in_front_and_back_matrix : bool):
         """
         Create a dictionary for the equivalent neurons.
         """
 
-        key = _get_key_from_layer_neuron_(layer=layer, neuron=neuron, M=self.M)
+        key = _get_key_from_layer_neuron_py(layer=layer, neuron=neuron, M=self.M)
         #print(f"Creating dict for neuron {neuron} at layer {layer} with key {key}")
         assert key not in self.equivalent_neurons, f"Index {key} already exists."
 
@@ -232,7 +267,7 @@ class Equivalent_Neurons_Index:
         value: float,
         **kwargs,
     ):
-        key = _get_key_from_layer_neuron_(layer=layer, neuron=neuron, M=self.M)
+        key = _get_key_from_layer_neuron_py(layer=layer, neuron=neuron, M=self.M)
         assert key in self.equivalent_neurons, f"Index {key} does not exist."
         #print(f"layer = {layer}, neuron = {neuron}, i = {i}, num_matrix = {num_matrix}, value = {value}, front_of_matrix = {front_of_matrix}, key = {key}")
         front_of_matrix = kwargs.get("front_of_matrix", None)

@@ -1,0 +1,60 @@
+data:
+  name: mnist
+  path: data/datasets/mnist_subset_10_per_class.pth
+  num_classes: 10
+  num_samples: 100
+divide_run: 1
+input_ball:
+  epsilon: 0.026
+  norm: Linf
+network:
+  name: 9x100
+  path: data/models/mnist_adv_9x100.pt
+  K: 10
+  n:
+  - 784
+  - 100
+  - 100
+  - 100
+  - 100
+  - 100
+  - 100
+  - 100
+  - 100
+  - 100
+  - 10
+models:
+- certification_model_type: UntargetedSDP
+  solver: mosek_classic
+  cuts:
+  - RLT
+  - triangularization
+  - McCormick_beta_z
+  - beta_logits_comparaison
+  - beta_logits_comparaison_big_M
+  - sum_beta_logits_equal_logit
+  RLT_props:
+  - 0.2
+  all_combinations_cuts: false
+  CHORDAL_DECOMPOSITION: true
+  LAST_LAYER: false
+  use_callback: false
+  use_active_neurons: true
+  use_inactive_neurons: false
+  keep_penultimate_actives: true
+  bounds_method: from_file
+  bounds_file: data/bounds/9x100-0.026_linf.csv
+  solver_time_limit: 60
+  dynamic_conic_bundle:
+    enabled: true
+    dualize:
+    - RLT
+    engine: conicbundle_native
+    max_iter: 1
+    term_relprec: 1.0e-07
+    log_every: 1
+    print_level: 0
+    eval_limit: 1
+    print_png: false
+    max_bundle_size: 200
+  use_compact_add_rlt: true

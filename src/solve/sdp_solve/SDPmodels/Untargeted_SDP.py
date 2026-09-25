@@ -46,7 +46,11 @@ from .certification_problem_constraints_beta import (
 from .certification_problem_constraints_division_by_layers import (
     CHORDAL_DECOMPOSITION_rec,
 )
-from .certification_problem_constraints_rlt import add_RLT_constraints
+from .certification_problem_constraints_rlt import (
+    add_RLT_constraints,
+    add_RLT_constraints_compact,
+    _add_McCormick_compact,
+)
 from .certification_problem_constraints_sdp import first_term_equal_zero
 from .certification_problem_relaxed_relu_heuristic import (
     add_z_quad_active_neuron_heuristic, 
@@ -71,6 +75,8 @@ logger_mosek = logging.getLogger("Mosek_logger")
     ReLU_triangularization,
     CHORDAL_DECOMPOSITION_rec,
     add_RLT_constraints,
+    add_RLT_constraints_compact,
+    _add_McCormick_compact,
     McCormick_inter_layers,
     first_term_equal_zero,
     all_Mc_Cormick_all_layers,
@@ -166,7 +172,10 @@ class UntargetedSDP(SDPSolver):
         # RLT
         _n = _snap()
         if "RLT" in cuts:
-            self.add_RLT_constraints(p=self.RLT_prop)
+            if self.use_compact_add_rlt:
+                self.add_RLT_constraints_compact(p=self.RLT_prop)
+            else:
+                self.add_RLT_constraints(p=self.RLT_prop)
         self._cut_constraint_counts["RLT"] = _snap() - _n
 
         # Finalisation (first_term, décomposition chordale, last_layer)

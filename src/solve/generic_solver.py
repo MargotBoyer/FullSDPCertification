@@ -96,6 +96,7 @@ class Solver:
         
         self.bounds_method = kwargs.get("bounds_method")
         self.keep_penultimate_actives = kwargs.get("keep_penultimate_actives", None)
+        self.use_compact_add_rlt = kwargs.get("use_compact_add_rlt", False)
         self.ultimate_layer_use_active_neurons = kwargs.get("ultimate_layer_use_active_neurons", self.K+1)
         logger.debug("COEFF : self ultimate_layer_use_active_neurons : ", self.ultimate_layer_use_active_neurons)
         print("Getting to compute bounds...")

@@ -263,6 +263,7 @@ class SDPSolverConfig(BaseModel):
         if v is False and values.get("use_active_neurons"):
             raise ValueError("Withdraw of active neurons on penultimate layer incompatible with use_active_neurons = True")
         return v
+    use_compact_add_rlt: bool = False  # Si true, utilise add_RLT_constraints_compact (SDPmodels/certification_problem_constraints_rlt.py) au lieu de add_RLT_constraints : construit directement les contraintes McCormick RLT dans list_cstr, sans passer par new_constraint()/add_quad_variable()/add_var() (un numba.typed.Dict par contrainte -- cout fixe disproportionné pour des contraintes à 1-3 termes). Retombe automatiquement sur le chemin classique pour tout triple nécessitant une substitution (neurone stable actif). Pensé pour engine="conicbundle_native" avec RLT_props=1. (générer 100% des RLT candidates et laisser le bundle choisir lesquelles dualiser) -- garder à false pour un run classique (résultat identique, juste plus lent à construire).
     bounds_file: Optional[str] = None
     L: Optional[List[float]] = None
     U: Optional[List[float]] = None
