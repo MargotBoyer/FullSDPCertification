@@ -66,7 +66,7 @@ class DynamicConicBundleSolver:
         u_max: float = 1e6,
         u_max_factor: float = 1e3,
         max_bundle_size: Optional[int] = None,
-        factor: Optional[float] = None,
+        bundle_size_factor: Optional[float] = None,
         theta_drop_tol: float = 1e-8,
         add_batch_size: int = 50,
         max_rounds: int = 100,
@@ -131,15 +131,16 @@ class DynamicConicBundleSolver:
             bundle (modèle sous-déterminé — cf. task-dynamic-conic-bundle.md,
             "Analyse statique vs dynamique"). Fixer un entier reste utile pour
             borner le coût du master problem QP à grande échelle.
-        factor : Optional[float]
-            Équivalent du paramètre FACTOR de la librairie MIQCR d'origine
-            (Miqcr-1.0_.../src/parameters.h — "Proportion of the considered
-            constraints into the SDP solver"), transposé ici à nos contraintes
-            DUALIZABLE (RLT) plutôt qu'aux McCormick internes de MIQCR. Ignoré si
-            max_bundle_size est déjà fourni explicitement (max_bundle_size a
-            toujours priorité). Sinon, si factor n'est pas None, max_bundle_size
-            est recalculé dans solve() (une fois all_dualizable connu) en
-            max(1, round(factor * len(all_dualizable))). None (défaut) laisse
+        bundle_size_factor : Optional[float]
+            Anciennement nommé `factor` (renommé pour ne plus être confondu avec le
+            vrai paramètre FACTOR de MIQCR, qui limite le nombre de contraintes
+            réellement dualisées — cf. certification_problem.py où ce filtrage est
+            appliqué en amont). Ignoré si max_bundle_size est déjà fourni
+            explicitement (max_bundle_size a toujours priorité). Sinon, si
+            bundle_size_factor n'est pas None, max_bundle_size est recalculé dans
+            solve() (une fois all_dualizable connu) en
+            max(1, round(bundle_size_factor * len(all_dualizable))). N'affecte pas
+            le nombre de contraintes réellement dualisées. None (défaut) laisse
             max_bundle_size inchangé.
         theta_drop_tol : float
             Mode dynamique seulement : retire une contrainte active si |theta_r| en
@@ -185,7 +186,7 @@ class DynamicConicBundleSolver:
         self.u_max_factor = u_max_factor
         self._u_calibration_base: Optional[float] = None
         self.max_bundle_size = max_bundle_size
-        self.factor = factor
+        self.bundle_size_factor = bundle_size_factor
         self.theta_drop_tol = theta_drop_tol
         self.add_batch_size = add_batch_size
         self.max_rounds = max_rounds
@@ -369,11 +370,11 @@ class DynamicConicBundleSolver:
                 self.cuts,
             )
 
-        if self.max_bundle_size is None and self.factor is not None:
-            self.max_bundle_size = max(1, round(self.factor * len(all_dualizable)))
+        if self.max_bundle_size is None and self.bundle_size_factor is not None:
+            self.max_bundle_size = max(1, round(self.bundle_size_factor * len(all_dualizable)))
             logger_cb.info(
-                "factor=%s x %d contraintes dualisables => max_bundle_size=%d",
-                self.factor, len(all_dualizable), self.max_bundle_size,
+                "bundle_size_factor=%s x %d contraintes dualisables => max_bundle_size=%d",
+                self.bundle_size_factor, len(all_dualizable), self.max_bundle_size,
             )
 
         if not self.dynamic:

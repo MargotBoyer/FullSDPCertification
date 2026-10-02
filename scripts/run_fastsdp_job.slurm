@@ -2,7 +2,7 @@
 #SBATCH --job-name=fast_sdp
 #SBATCH -A llc@cpu                      # Compte CPU (MOSEK est CPU-only)
 #SBATCH --partition=cpu_p1              # Partition CPU
-#SBATCH --cpus-per-task=40             # Nœud entier : 40 CPUs = ~192 Go RAM sur cpu_p1 (seul moyen d'avoir plus de mémoire sur Jean-Zay)
+#SBATCH --cpus-per-task=80             # Nœud entier : cpu_p1 a en realite 80 CPUs (hyperthreading, 40 coeurs physiques) / 191 Go RAM (`sinfo -o '%P %c %m %l'`) -- 40 ne reservait que la MOITIE du noeud (~95 Go), insuffisant et cause d'un OOM observe concretement (job 478881, data_index=7, "signal=9" / "oom_kill event") sur un SDPU classique sans pruning actif. 80 = noeud entier = ~191 Go (seul moyen d'avoir plus de memoire sur Jean-Zay cpu_p1).
 #SBATCH --time=20:00:00                 # Temps max par job (limite cpu_p1 sur Jean-Zay)
 #SBATCH --chdir=/lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification
 #SBATCH --output=slurm-%x-%j.out       # Log SLURM standard (à la racine du projet)
@@ -25,7 +25,13 @@ source /lustre/fswork/projects/rech/llc/uvq13au/venvs/fastsdp/bin/activate
 # Sans effet si la conic bundle native n'est pas utilisee dans le yaml.
 if [ -d "Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle" ]; then
     echo "Recompilation de ConicBundle (MODE=OPTI) + du pont natif..."
-    module load gcc
+    # gcc/8.5.0 est deja charge comme dependance de openmpi/4.1.1 (cf. ligne 16) --
+    # `module load gcc` (sans version) chargerait la version par defaut (gcc/15.2.0
+    # au 2026-10), en conflit avec celle deja chargee ("ERROR: Conflicting gcc is
+    # loaded", observe concretement job 465421 -- sans consequence ce jour-la, le
+    # chargement a simplement ete rejete et gcc/8.5.0 est reste actif, mais fragile).
+    # Version explicite = no-op propre, sans warning.
+    module load gcc/8.5.0
     make -C Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle MODE=OPTI \
         && make -C src/miqcr_bridge/conicbundle_native \
         || { echo "ERREUR: echec de compilation de ConicBundle/libcb_native.so"; exit 1; }
@@ -56,7 +62,12 @@ else
     echo "Run name: $NAME_RUN"
     echo "Job ID: $SLURM_JOB_ID"
 
-    if [ -n "$START" ] && [ -n "$END" ]; then
+    if [ -n "$INDICES" ]; then
+        # Liste explicite de data_index (non contigus), ex. INDICES="59 23 45 7 31".
+        # Priorite sur START/END si les deux sont fournis par erreur.
+        echo "Indices: $INDICES"
+        python src/certification_problem.py "$NETWORK_NAME" "$NAME_RUN" --indices $INDICES
+    elif [ -n "$START" ] && [ -n "$END" ]; then
         python src/certification_problem.py "$NETWORK_NAME" "$NAME_RUN" --start "$START" --end "$END"
     else
         python src/certification_problem.py "$NETWORK_NAME" "$NAME_RUN"

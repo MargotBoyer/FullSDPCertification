@@ -89,6 +89,8 @@ class MosekClassicHandler:
         """
         print("Initializing MosekClassicHandler")
         self._cb_name_to_idx = None  # cache paresseux, cf. _get_cb_name_to_idx (dynamic conic bundle)
+        self._cb_dualized_by_name = None  # cache paresseux, cf. _get_cb_dualized_by_name (dynamic conic bundle)
+        self._cb_resolve_cache = {}  # memoisation resolve_dualized, cf. setup_dualization
         self.CHORDAL_DECOMPOSITION = kwargs.get("CHORDAL_DECOMPOSITION", False)
 
         self.LAST_LAYER = kwargs.get("LAST_LAYER", False)
@@ -174,13 +176,6 @@ class MosekClassicHandler:
         print("Adjusting MOSEK solver parameters")
         
         # ===== TOLÉRANCES STRICTES pour réduire le gap primal-dual =====
-        # Réduire le gap relatif entre primal et dual
-        self.task.putdouparam(mosek.dparam.intpnt_tol_rel_gap, 1e-3)  # 1e-6 → 1e-8 : plus strict
-        
-        # Faisabilité primale et duale plus stricte
-        self.task.putdouparam(mosek.dparam.intpnt_tol_pfeas, 1e-3)    # Gap primal plus petit
-        self.task.putdouparam(mosek.dparam.intpnt_tol_dfeas, 1e-3)    # Gap dual plus petit
-        
         # ===== AUGMENTER LES ITÉRATIONS =====
         # Par défaut ~300, vous pouvez l'augmenter pour forcer la convergence
         self.task.putintparam(mosek.iparam.intpnt_max_iterations, 400)
@@ -516,6 +511,11 @@ class MosekClassicHandler:
         # bug de perf en O(len(dualizable_names) * len(list_cstr)), cf. investigation
         # mnist-9x100 -- ~200s perdus sur un modèle à ~41k contraintes RLT dualisables).
         self._cb_name_to_idx = None
+        # self._cb_dualized va etre reconstruit ci-dessous -- invalide aussi le cache
+        # name->entree (cf. _get_cb_dualized_by_name, utilise par resolve_dualized).
+        self._cb_dualized_by_name = None
+        # Nouveau pool dualise => nouvelle memoisation (cf. resolve_dualized).
+        self._cb_resolve_cache = {}
 
         for name in dualizable_names:
             entry, idx, bound_type, lb, ub = self._dualization_triplet_for(name)
@@ -560,6 +560,16 @@ class MosekClassicHandler:
         if self._cb_name_to_idx is None:
             self._cb_name_to_idx = {c["name"]: idx for idx, c in enumerate(self.Constraints.list_cstr)}
         return self._cb_name_to_idx
+
+    def _get_cb_dualized_by_name(self) -> dict:
+        """Cache paresseux name->entree de self._cb_dualized, construit une seule fois
+        par setup_dualization(). Utilise par resolve_dualized() pour retrouver l'entree
+        (triplet num_matrix/i/j/value + rhs) d'un theta_r sans reparcourir la liste
+        complete des m contraintes dualisees a chaque appel oracle -- cf. commentaire
+        dans resolve_dualized (boucle creuse sur theta.items())."""
+        if self._cb_dualized_by_name is None:
+            self._cb_dualized_by_name = {d["name"]: d for d in self._cb_dualized}
+        return self._cb_dualized_by_name
 
     def _dualization_triplet_for(self, name: str):
         """
@@ -639,18 +649,51 @@ class MosekClassicHandler:
         h(theta) = primal_obj + cte - Σ theta_r * rhs_r), et "X" (dict
         {num_matrix: np.ndarray} des matrices primales nécessaires au calcul des
         sous-gradients, cf. get_dualized_constraints_data()).
+
+        MEMOISATION : si ce theta EXACT (meme ensemble de composantes non nulles,
+        memes valeurs bit-a-bit) a deja ete resolu avec succes depuis le dernier
+        setup_dualization(), renvoie directement le resultat mis en cache sans
+        rappeler MOSEK. Justifie par une anomalie numerique confirmee
+        (task-dynamic-conic-bundle.md, investigation data_index=23/mnist-9x100,
+        probleme severement mal conditionne) : reutiliser la MEME tache MOSEK pour
+        resoudre plusieurs objectifs differents puis REVENIR EXACTEMENT a un theta
+        deja visite peut renvoyer une valeur sensiblement -- parfois totalement --
+        differente de la premiere resolution (ex. theta=0 : -1.9029 la premiere
+        fois, +4.54 apres plusieurs resolutions intermediaires, alors que resoudre
+        un theta JAMAIS visite auparavant sur la meme tache "sale" reste fiable,
+        confirme identique a une tache neuve). La memoisation elimine cette classe
+        d'erreur par construction (un theta deja resolu ne repasse plus jamais par
+        task.optimize()) et economise au passage une resolution MOSEK redondante
+        (coute non negligeable, 25-85s observes sur ce modele). Seuls les resultats
+        REUSSIS (lb_value non None) sont mis en cache -- un echec reste toujours
+        reessaye en entier (transitoire possible, pas de raison de le figer).
         """
+        cache = self._cb_resolve_cache
+        cache_key = tuple(sorted((name, t) for name, t in theta.items() if t != 0.0))
+        if cache_key in cache:
+            return cache[cache_key]
+
+        t_pretreat0 = time.perf_counter()
         nm_base, i_base, j_base, v_base = self._cb_base_obj
         coeff: dict = {}
-        for k in range(len(nm_base)):
+        for k in range(len(nm_base)): ## Creation du dict : (num_matrix, i,j) -> value
             key = (int(nm_base[k]), int(i_base[k]), int(j_base[k]))
             coeff[key] = coeff.get(key, 0.0) + float(v_base[k])
 
+        # Boucle creuse : itere sur les entrees de `theta` (potentiellement << m, cf.
+        # active_bounds_fixing qui fixe la plupart des theta_r a 0) plutot que sur les
+        # m contraintes dualisees a CHAQUE appel oracle -- avec le dict complet {name: 0.0
+        # pour tout name absent}, le cout etait O(m) meme quand quasiment tout est nul.
+        # Un name absent de theta reste implicitement 0.0 (meme semantique qu'avant, cf.
+        # theta.get(d["name"], 0.0)) ; un name present mais explicitement a 0.0 est skippe
+        # comme avant. Necessite theta_names_by_dualized (cache paresseux name->entry,
+        # cf. _get_cb_dualized_by_name) pour retrouver l'entree sans reparcourir la liste.
+        by_name = self._get_cb_dualized_by_name()
         theta_sum_rhs = 0.0
-        for d in self._cb_dualized:
-            t = float(theta.get(d["name"], 0.0))
+        for name, t in theta.items():
             if t == 0.0:
                 continue
+            d = by_name[name]
             theta_sum_rhs += t * d["rhs"]
             for k in range(len(d["i"])):
                 key = (int(d["num_matrix"][k]), int(d["i"][k]), int(d["j"][k]))
@@ -664,11 +707,22 @@ class MosekClassicHandler:
                 np.array(j_all, dtype=np.int32),
                 np.array(v_all, dtype=np.float64),
             )
+        # pretreatment_time : tout le cote Python avant la resolution SDP pure
+        # (construction du dict coeff + putbarcblocktriplet) -- separe de solve_time
+        # (task.optimize() seul) pour distinguer le cout Python du cout MOSEK a
+        # chaque appel oracle, cf. demande utilisateur d'exposer ce detail dans
+        # conic_bundle_diag_*.csv (colonne pretreatment_s).
+        pretreatment_time = time.perf_counter() - t_pretreat0
 
+        t_solve0 = time.perf_counter()
         self.task.optimize()
+        solve_time = time.perf_counter() - t_solve0
         status = self.task.getsolsta(mosek.soltype.itr)
 
-        result = {"status": status, "primal_obj": None, "lb_value": None, "X": {}}
+        result = {
+            "status": status, "primal_obj": None, "lb_value": None, "X": {},
+            "pretreatment_time": pretreatment_time, "solve_time": solve_time,
+        }
         if status not in (mosek.solsta.optimal, mosek.solsta.prim_and_dual_feas):
             return result
 
@@ -687,6 +741,7 @@ class MosekClassicHandler:
             dim = self.indexes_matrices.get_shape_matrix(num_matrix)
             result["X"][num_matrix] = self.get_solution(ind_solution=num_matrix, dim=dim)
 
+        cache[cache_key] = result
         return result
 
     def teardown_dualization(self):
@@ -700,3 +755,4 @@ class MosekClassicHandler:
 
         self._cb_dualized = []
         self._cb_saved_bounds = {}
+        self._cb_resolve_cache = {}

@@ -139,40 +139,55 @@ class DynamicConicBundleConfig(BaseModel):
     active_bounds_fixing: bool = True  # cb_set_active_bounds_fixing -- recommandé par cb_cinterface.h pour la relaxation lagrangienne mais documenté "no convergence theory". Écarté empiriquement comme cause des échecs "upper bound < lower bound" (résultats identiques avec false) -- gardé configurable pour référence.
     max_subg_by_point: int = 10  # Nb max de sous-gradients epsilon renvoyés par appel oracle QUAND un "coin" est détecté (dégénérescence du X* optimal MOSEK, cf. cb_wrapper.solve_native_conicbundle_dual) -- adresse directement les échecs "upper bound < lower bound" observés en dualisant beaucoup de contraintes (RLT+ReLU_quad+triangularization/ReLU_linear) : un seul sous-gradient n'est représentatif que d'une direction quand le sous-problème résiduel a plusieurs X* optimaux très différents. 1 = désactive l'enrichissement (comportement historique).
 
+    @validator("bundle_size_factor")
+    def validate_bundle_size_factor(cls, v):
+        if v is not None and not (0.0 < v <= 1.0):
+            raise ValueError(f"bundle_size_factor doit être dans ]0, 1] (proportion du pool dualisé), reçu {v}.")
+        return v
+
     @validator("factor")
     def validate_factor(cls, v):
         if v is not None and not (0.0 < v <= 1.0):
-            raise ValueError(f"factor doit être dans ]0, 1] (proportion des contraintes dualisables), reçu {v}.")
+            raise ValueError(f"factor doit être dans ]0, 1] (proportion des contraintes dualisables réellement dualisées), reçu {v}.")
         return v
 
     @validator("dualize")
     def validate_dualize(cls, v):
         for family in v:
-            if family not in ["RLT", "ReLU_quad", "ReLU_linear", "triangularization"]:
+            if family not in [
+                "RLT", "ReLU_quad", "ReLU_linear", "triangularization",
+                "McCormick_beta_z", "beta_logits_comparaison", "sum_beta_logits_equal_logit",
+            ]:
                 raise ValueError(
                     f"Famille de coupes '{family}' non dualisable — familles taguées "
                     "ConstraintRole.DUALIZABLE (cf. Constraints.mark_current_dualizable) : "
                     "'RLT' (McCormick_inter_layers), 'ReLU_quad' (l'équation quadratique "
                     "z_k*(z_k - W z_(k-1) - b_k) = 0), 'ReLU_linear' (z_k>=0 et "
-                    "z_k>=W z_(k-1)+b_k, ReLU_constraint_Lan) et 'triangularization' "
-                    "(ReLU_triangularization). quad_bounds, first_term_equal_zero et la "
-                    "cohérence chordale (CHORDAL_DECOMPOSITION_rec) restent toujours dures."
+                    "z_k>=W z_(k-1)+b_k, ReLU_constraint_Lan), 'triangularization' "
+                    "(ReLU_triangularization), 'McCormick_beta_z' (beta_j*z_(layer,i), "
+                    "modèles untargeted uniquement), 'beta_logits_comparaison' "
+                    "(z_(K,j2)*beta_j2, untargeted) et 'sum_beta_logits_equal_logit' "
+                    "(z_i - sum_j beta_j*z_i = 0, untargeted). quad_bounds, "
+                    "first_term_equal_zero, discrete_betas, betai_betaj et la cohérence "
+                    "chordale (CHORDAL_DECOMPOSITION_rec) restent toujours dures."
                 )
         return v
 
-    dynamic: bool = False  # False = algorithme statique (5.4.1, Algorithme 2, pool fixe) ; True = dynamique (5.4.2, ajout/retrait de contraintes)
+    dynamic: bool = False  # False = algorithme statique (5.4.1, Algorithme 2, pool fixe) ; True = dynamique (5.4.2, ajout/retrait de contraintes). Supporté par les deux moteurs, avec des mécanismes DIFFÉRENTS : engine="python" (dynamic_conic_bundle/solver.py) redémarre un round de bundle proximal à chaque mise à jour du pool ; engine="conicbundle_native" (solve_native_conicbundle_dynamic, cb_wrapper.py) redimensionne le problème ConicBundle EN PLACE via cb_append_variables/cb_reassign_variables (transposé du mécanisme réel de MIQCR, solver_sdp_mixed.c), sans jamais détruire/reconstruire le bundle. Réutilise add_batch_size/theta_drop_tol/max_rounds dans les deux cas.
     max_iter: int = 200  # Nombre max d'itérations proximal-bundle par round
     C1: float = 1.0e-4  # Critère d'arrêt : arrête quand la progression *prédite* par le modèle du bundle (pas la progression réelle) tombe sous ce seuil
     C2: float = 0.1  # Ratio (dans (0,1)) de la progression prédite à réaliser réellement pour qu'un pas soit dit "sérieux" (voir proximal_master.serious_null_step_test)
     proximal_u_init: float = 1.0  # Paramètre proximal u (Algorithme 2, ligne 5)
-    theta_drop_tol: float = 1.0e-8  # Mode dynamique seulement : retire une contrainte active si |theta_r| < ce seuil (theta = notation main.pdf, sans rapport avec alpha-CROWN)
+    theta_drop_tol: float = 1.0e-3  # Mode dynamique seulement : retire une contrainte active si |theta_r| < ce seuil (theta = notation main.pdf, sans rapport avec alpha-CROWN)
     add_batch_size: int = 50  # Mode dynamique seulement : nb de contraintes les plus violées ajoutées par round
     max_rounds: int = 100  # Mode dynamique seulement : nb max de rounds (ajout/retrait) — pas de limite propre sinon, contrairement à max_iter qui ne borne que la boucle interne par round
     max_bundle_size: Optional[int] = None  # Nb max de coupes conservées dans le bundle. None = comportement par défaut de chaque moteur : pour engine="python", pas de cap (borné naturellement par max_iter) — recommandé, cf. task-dynamic-conic-bundle.md "Analyse statique vs dynamique" (cap trop petit face à dim(theta) = arrêt prématuré), éviction FIFO (cf. ProximalBundle) ; pour engine="conicbundle_native", défaut interne de la vraie librairie = 50 (constante codée en dur, FunctionProblem::FunctionProblem dans funproblem.cxx), éviction/agrégation interne à la librairie une fois le plafond atteint. Fixer un entier pour borner le coût du master problem QP à grande échelle (au prix d'une convergence potentiellement plus lente/moins précise si le cap est trop petit).
-    factor: Optional[float] = None  # Équivalent du paramètre FACTOR de la librairie MIQCR d'origine (Miqcr-1.0_.../src/parameters.h, "Proportion of the considered constraints into the SDP solver"), transposé ici à nos contraintes DUALIZABLE (RLT) plutôt qu'aux McCormick internes de MIQCR. Ignoré si max_bundle_size est déjà fourni explicitement (max_bundle_size a toujours priorité). Sinon, si factor n'est pas None, max_bundle_size = max(1, round(factor * nb_contraintes_dualizable)), calculé une fois le modèle construit (les deux moteurs "python" et "conicbundle_native" le supportent). Doit être dans ]0, 1].
-    max_new_subgradients: Optional[int] = None  # engine="conicbundle_native" uniquement (ignoré par engine="python", qui ne renvoie jamais plus d'un sous-gradient par évaluation) : nb max de nouveaux sous-gradients epsilon renvoyés par appel oracle (cb_set_max_new_subgradients). None = défaut interne de la librairie = 5 (funproblem.cxx).
+    bundle_size_factor: Optional[float] = None  # Anciennement nommé `factor` (renommé pour ne plus être confondu avec le vrai paramètre FACTOR de MIQCR, cf. `factor` ci-dessous). Ignoré si max_bundle_size est déjà fourni explicitement (max_bundle_size a toujours priorité). Sinon, si bundle_size_factor n'est pas None, max_bundle_size = max(1, round(bundle_size_factor * nb_contraintes_dualizable)), calculé une fois le modèle construit (les deux moteurs "python" et "conicbundle_native" le supportent). Plafonne le nombre de COUPES conservées en mémoire dans le bundle ConicBundle (cb_set_max_bundlesize) — n'affecte PAS le nombre de contraintes réellement dualisées (ça, c'est le rôle de `factor`). Doit être dans ]0, 1].
+    factor: Optional[float] = None  # Équivalent du VRAI paramètre FACTOR de la librairie MIQCR d'origine (Miqcr-1.0_.../src/parameters.h, "Proportion of the considered constraints into the SDP solver" ; CLAUDE.md MIQCR section 7 : psdp->nb_cont = FACTOR * psdp->length). Détermine la proportion des contraintes DUALIZABLE candidates qui sont EFFECTIVEMENT dualisées (reçoivent un theta_r) dans la relaxation lagrangienne de l'objectif -- les autres sont totalement absentes du modèle (ni dures, ni pénalisées), exactement comme dans MIQCR. None (défaut) = toutes les contraintes DUALIZABLE candidates sont dualisées (comportement historique). Sélection déterministique (les premières factor*m contraintes dans l'ordre renvoyé par get_dualizable_constraint_names -- pas de critère de magnitude/violation pour l'instant, contrairement à l'heuristique top-p% de RLT_props). engine="conicbundle_native" uniquement pour l'instant. Doit être dans ]0, 1].
+    max_new_subgradients: Optional[int] = None  # engine="conicbundle_native" uniquement (ignoré par engine="python", qui ne renvoie jamais plus d'un sous-gradient par évaluation) : nb max de nouveaux sous-gradients epsilon renvoyés par appel oracle (cb_set_max_new_subgradients). None = défaut interne de la librairie = 1 (FunctionBundleParameters::FunctionBundleParameters(), funproblem.hxx — PAS 5 comme documenté précédemment). Avec ce défaut, la sonde de coin (cf. max_subg_by_point dans cb_wrapper.solve_native_conicbundle_dual) ne s'exécute JAMAIS : il faut explicitement fixer max_new_subgradients >= 2 pour l'activer.
     log_theta_every_n_iter: int = 1  # Fréquence (en itérations) d'enregistrement de theta_history (0 = jamais)
-    print_png: bool = False  # Si true, écrit un PNG de diagnostic par résolution (h(theta)/u/taille du bundle vs itération, cf. dynamic_conic_bundle/plotting.py) dans le dossier du run. Désactivé par défaut (coût I/O/matplotlib non négligeable sur un run à des centaines d'échantillons).
+    print_png: bool = True  # Si true, écrit un PNG de diagnostic par résolution (h(theta)/u/taille du bundle vs itération, cf. dynamic_conic_bundle/plotting.py) dans le dossier du run. Activé par défaut (coût I/O/matplotlib jugé acceptable face à la valeur diagnostique, cf. analyse du blocage data_index=59/target=8) — mettre à false pour un run à grande échelle (des centaines d'échantillons) où ce coût par résolution n'est plus négligeable.
+    png_every: int = 10  # engine="conicbundle_native" uniquement : régénère le PNG (+ écrit une ligne dans le CSV compagnon .csv, à chaque appel oracle) tous les png_every appels oracle, plutôt qu'une seule fois à la toute fin. Permet de suivre un run long en direct et de conserver un diagnostic si le process est tué/timeout avant la fin. 0 = uniquement le PNG final (comportement historique) ; le CSV compagnon est toujours écrit en direct dès que print_png=true.
 
     stop_when_positive: bool = True  # Arrête le bundle dès qu'une évaluation de h(theta) (n'importe quel point oracle, y compris pas nuls) dépasse positivity_threshold : une seule borne duale valide strictement positive suffit à certifier la robustesse (dualité faible), inutile de continuer à affiner theta. status="reached_positivity" dans results_conic_bundle.csv. Supporté par les deux moteurs ("python" et "conicbundle_native").
     positivity_threshold: float = 1.0e-6  # Seuil utilisé par stop_when_positive.

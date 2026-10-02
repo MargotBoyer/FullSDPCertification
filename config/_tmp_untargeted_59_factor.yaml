@@ -56,5 +56,5 @@ models:
     print_level: 0
     eval_limit: 400
     print_png: false
-    factor: 0.01
+    bundle_size_factor: 0.01
   use_compact_add_rlt: true

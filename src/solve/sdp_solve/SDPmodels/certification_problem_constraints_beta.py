@@ -128,6 +128,7 @@ def McCormick_beta_z(self, layer: int, cuts=None):
                 value=-self.handler.Constraints.U_above_zero[layer][i],
             )
             self.handler.Constraints.add_bound(bound_type=mosek.boundkey.up, bound=0)
+            self.handler.Constraints.mark_current_dualizable("McCormick_beta_z")
 
             # ****************************************************
             if cuts is None or "sum_beta_logits_equal_logit" not in cuts:
@@ -164,6 +165,7 @@ def McCormick_beta_z(self, layer: int, cuts=None):
                     value=L_layer_i
                 )
                 self.handler.Constraints.add_bound(bound_type=mosek.boundkey.up, bound=0)
+                self.handler.Constraints.mark_current_dualizable("McCormick_beta_z")
 
             # ****************************************************
             if cuts is None or "sum_beta_logits_equal_logit" not in cuts:
@@ -197,6 +199,7 @@ def McCormick_beta_z(self, layer: int, cuts=None):
                     bound_type=mosek.boundkey.lo,
                     bound=-self.handler.Constraints.U_above_zero[layer][i],
                 )
+                self.handler.Constraints.mark_current_dualizable("McCormick_beta_z")
 
             # ****************************************************
             name_cstr_4 = f"T_{(layer, i),j}  >= 0"
@@ -221,6 +224,7 @@ def McCormick_beta_z(self, layer: int, cuts=None):
                 value=-L_layer_i,
             )
             self.handler.Constraints.add_bound(bound_type=mosek.boundkey.lo, bound=0)
+            self.handler.Constraints.mark_current_dualizable("McCormick_beta_z")
 
 
 def McCormick_beta_z_all_valid_layers(self, cuts=None):
@@ -439,6 +443,7 @@ def z_j2_beta_j2_greater_than_zj(self):
                 bound_type=mosek.boundkey.lo,
                 bound=-self.handler.Constraints.U_above_zero[self.K][j1],
             )
+            self.handler.Constraints.mark_current_dualizable("beta_logits_comparaison")
 
 
 def z_j2_beta_j2_less_than_zj(self):
@@ -512,6 +517,7 @@ def z_j2_beta_j2_less_than_zj(self):
                 bound_type=mosek.boundkey.up,
                 bound=-self.handler.Constraints.L[self.K][j1],
             )
+            self.handler.Constraints.mark_current_dualizable("beta_logits_comparaison")
 
 
 def sum_beta_j_z_i_equal_z_i_layer(self, layer: int):
@@ -551,9 +557,10 @@ def sum_beta_j_z_i_equal_z_i_layer(self, layer: int):
             bound_type=mosek.boundkey.fx,
             bound=0,
         )
+        self.handler.Constraints.mark_current_dualizable("sum_beta_logits_equal_logit")
 
 
-    
+
 
 
 def sum_beta_j_z_i_equal_z_i(self):

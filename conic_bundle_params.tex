@@ -1,0 +1,36 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{margin=2cm}
+
+\begin{document}
+
+\section*{Param\`etres du dynamic conic bundle --- batterie de tests}
+
+Configuration utilis\'ee pour les runs \texttt{battery-targeted-rlt-*} et
+\texttt{battery-untargeted-rlt-*} (\texttt{engine=conicbundle\_native},
+\texttt{dynamic=true}, \texttt{dualize=[RLT]}).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{l l l}
+\toprule
+Param\`etre & Valeur & R\^ole \\
+\midrule
+\texttt{dualize}          & \texttt{[RLT]} & Famille de coupes dualis\'ee \\
+\texttt{factor}           & \texttt{0.01}  & Proportion du pool RLT candidat r\'eellement dualis\'ee \\
+\texttt{add\_batch\_size} & \texttt{50}    & Contraintes ajout\'ees par round (les plus viol\'ees) \\
+\texttt{theta\_drop\_tol} & $10^{-8}$      & Seuil de retrait d'une contrainte ($|\theta_r|$ sous ce seuil) \\
+\texttt{max\_rounds}      & \texttt{100}   & Nombre max de mises \`a jour du pool \\
+\texttt{max\_iter}        & \texttt{500}   & Nombre max de pas de descente ConicBundle \\
+\texttt{eval\_limit}      & \texttt{2000}  & Nombre max d'appels \`a l'oracle \\
+\texttt{term\_relprec}    & $10^{-7}$      & Crit\`ere d'arr\^et (pr\'ecision relative) \\
+\texttt{solver\_time\_limit} & \texttt{180s} (Targeted) / \texttt{400s} (Untargeted) & Timeout MOSEK par r\'esolution \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

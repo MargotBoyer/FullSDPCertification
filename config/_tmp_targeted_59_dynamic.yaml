@@ -40,17 +40,22 @@ models:
   keep_penultimate_actives: true
   bounds_method: from_file
   bounds_file: data/bounds/9x100-0.026_linf.csv
-  solver_time_limit: 60
+  solver_time_limit: 180
   dynamic_conic_bundle:
     enabled: true
     dualize:
     - RLT
     engine: conicbundle_native
-    max_iter: 60
+    dynamic: true
+    factor: 0.01
+    max_iter: 500
     term_relprec: 1.0e-07
     log_every: 5
     print_level: 0
-    eval_limit: 400
-    print_png: false
-    bundle_size_factor: 0.01
+    eval_limit: 2000
+    print_png: true
+    png_every: 10
+    add_batch_size: 50
+    theta_drop_tol: 1.0e-03
+    max_rounds: 100
   use_compact_add_rlt: true

@@ -24,11 +24,15 @@ network:
   - 100
   - 10
 models:
-- certification_model_type: TargetedSDP
+- certification_model_type: UntargetedSDP
   solver: mosek_classic
   cuts:
   - RLT
   - triangularization
+  - McCormick_beta_z
+  - beta_logits_comparaison
+  - beta_logits_comparaison_big_M
+  - sum_beta_logits_equal_logit
   RLT_props:
   - 1.0
   all_combinations_cuts: false
@@ -40,7 +44,7 @@ models:
   keep_penultimate_actives: true
   bounds_method: from_file
   bounds_file: data/bounds/9x100-0.026_linf.csv
-  solver_time_limit: 60
+  solver_time_limit: 180
   dynamic_conic_bundle:
     enabled: true
     dualize:
@@ -51,6 +55,7 @@ models:
     log_every: 5
     print_level: 0
     eval_limit: 400
-    print_png: false
+    print_png: true
+    png_every: 10
     bundle_size_factor: 0.01
   use_compact_add_rlt: true

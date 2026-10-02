@@ -22,7 +22,7 @@ import multiprocessing as mp
 import time
 from adversarial_attacks import PGDAttack
 from dynamic_conic_bundle import DynamicConicBundleSolver
-from miqcr_bridge.conicbundle_native import solve_native_conicbundle_dual
+from miqcr_bridge.conicbundle_native import solve_native_conicbundle_dual, solve_native_conicbundle_dynamic
  
 from fastsdp_tools import create_folder_benchmark, get_project_path
 from fastsdp_tools.resume_utils import find_run_yaml, find_processed_indices, load_existing_results, log_run_history
@@ -415,7 +415,7 @@ class Certification_Problem:
             add_batch_size=cb_config.add_batch_size,
             max_rounds=cb_config.max_rounds,
             max_bundle_size=cb_config.max_bundle_size,
-            factor=cb_config.factor,
+            bundle_size_factor=cb_config.bundle_size_factor,
             log_theta_every_n_iter=cb_config.log_theta_every_n_iter,
             dualize_families=cb_config.dualize,
             stop_when_positive=cb_config.stop_when_positive,
@@ -460,6 +460,40 @@ class Certification_Problem:
         try:
             model_instance.build_model(cuts)
             dualizable_names = model_instance.get_dualizable_constraint_names(cb_config.dualize)
+            if cb_config.factor is not None:
+                # Equivalent du vrai FACTOR de MIQCR (psdp->nb_cont = FACTOR *
+                # psdp->length, CLAUDE.md MIQCR section 7) : ne dualise reellement
+                # qu'une proportion du pool DUALIZABLE candidat -- les contraintes
+                # exclues doivent etre totalement absentes du modele (ni dures, ni
+                # penalisees), pas juste mises a theta_r=0. A ne pas confondre avec
+                # bundle_size_factor (qui plafonne les COUPES gardees en memoire par
+                # ConicBundle, sans jamais reduire le nombre de contraintes
+                # dualisees). Selection deterministique (les n_keep premieres dans
+                # l'ordre de get_dualizable_constraint_names) -- pas de critere de
+                # magnitude/violation pour l'instant, contrairement a l'heuristique
+                # top-p% deja utilisee pour RLT_props a la generation des coupes.
+                #
+                # IMPORTANT : setup_dualization() doit etre appelee ICI avec la liste
+                # COMPLETE (avant troncature) pour relacher la borne MOSEK de TOUTES
+                # les contraintes DUALIZABLE candidates -- solve_native_conicbundle_dual/
+                # _dynamic rappelle setup_dualization() en interne avec la liste TRONQUEE
+                # (n_keep), ce qui est sans danger (_dualization_triplet_for lit les
+                # metadonnees figees de list_cstr, pas l'etat courant de la borne dans le
+                # task) mais ne relache QUE les contraintes passees. Sans cet appel
+                # prealable sur la liste complete, les contraintes exclues restaient
+                # DURES (jamais relachees) au lieu d'etre absentes -- bug decouvert
+                # concretement sur mnist-9x100/UntargetedSDP data_index=23 (factor=0.01) :
+                # 128886 contraintes RLT restees dures rendaient le theta=0 initial
+                # quasiment aussi couteux que le SDP classique complet (timeout a 400s+
+                # sans converger, alors que la calibration devrait etre bien plus legere
+                # avec seulement 1% du pool RLT pertinent).
+                model_instance.handler.setup_dualization(dualizable_names)
+                n_total = len(dualizable_names)
+                n_keep = max(1, round(cb_config.factor * n_total))
+                dualizable_names = dualizable_names[:n_keep]
+                print(f"[conic bundle] factor={cb_config.factor} x {n_total} contraintes "
+                      f"dualisables candidates => {n_keep} reellement dualisees "
+                      f"(les {n_total - n_keep} autres relachees mais jamais penalisees)")
             # handler_classic.initiate_env() enregistre inconditionnellement un
             # InfoCallback MOSEK très verbeux (non lié à use_callback) — le silencer
             # accélère fortement chaque résolution (aucun effet sur le résultat
@@ -468,25 +502,54 @@ class Certification_Problem:
             png_save_path = None
             if cb_config.print_png:
                 png_save_path = os.path.join(results_dir, f"conic_bundle_diag_{data_index}_{ytarget}.png")
-            lb, _theta_best, n_iter, cb_status = solve_native_conicbundle_dual(
-                model_instance.handler,
-                dualizable_names,
-                max_iter=cb_config.max_iter,
-                term_relprec=cb_config.term_relprec,
-                eval_limit=cb_config.eval_limit,
-                print_level=cb_config.print_level,
-                log_every=cb_config.log_every,
-                max_bundle_size=cb_config.max_bundle_size,
-                factor=cb_config.factor,
-                max_new_subgradients=cb_config.max_new_subgradients,
-                print_png=cb_config.print_png,
-                png_save_path=png_save_path,
-                png_title=f"{self.network_name} data_index={data_index} target={ytarget} (native)",
-                stop_when_positive=cb_config.stop_when_positive,
-                positivity_threshold=cb_config.positivity_threshold,
-                active_bounds_fixing=cb_config.active_bounds_fixing,
-                max_subg_by_point=cb_config.max_subg_by_point,
-            )
+            if cb_config.dynamic:
+                # Mode dynamique transpose de MIQCR (cb_append_variables/cb_reassign_variables
+                # en place, cf. solve_native_conicbundle_dynamic) -- distinct du mode dynamique
+                # du moteur "python" (redemarrage par round). Reutilise add_batch_size/
+                # theta_drop_tol/max_rounds deja presents dans DynamicConicBundleConfig
+                # (jusqu'ici consommes uniquement par le moteur "python").
+                lb, _theta_best, n_iter, cb_status = solve_native_conicbundle_dynamic(
+                    model_instance.handler,
+                    dualizable_names,
+                    add_batch_size=cb_config.add_batch_size,
+                    theta_drop_tol=cb_config.theta_drop_tol,
+                    max_pool_updates=cb_config.max_rounds,
+                    max_iter=cb_config.max_iter,
+                    term_relprec=cb_config.term_relprec,
+                    eval_limit=cb_config.eval_limit,
+                    print_level=cb_config.print_level,
+                    log_every=cb_config.log_every,
+                    max_bundle_size=cb_config.max_bundle_size,
+                    bundle_size_factor=cb_config.bundle_size_factor,
+                    print_png=cb_config.print_png,
+                    png_save_path=png_save_path,
+                    png_title=f"{self.network_name} data_index={data_index} target={ytarget} (native dynamic)",
+                    png_every=cb_config.png_every,
+                    stop_when_positive=cb_config.stop_when_positive,
+                    positivity_threshold=cb_config.positivity_threshold,
+                    active_bounds_fixing=cb_config.active_bounds_fixing,
+                )
+            else:
+                lb, _theta_best, n_iter, cb_status = solve_native_conicbundle_dual(
+                    model_instance.handler,
+                    dualizable_names,
+                    max_iter=cb_config.max_iter,
+                    term_relprec=cb_config.term_relprec,
+                    eval_limit=cb_config.eval_limit,
+                    print_level=cb_config.print_level,
+                    log_every=cb_config.log_every,
+                    max_bundle_size=cb_config.max_bundle_size,
+                    bundle_size_factor=cb_config.bundle_size_factor,
+                    max_new_subgradients=cb_config.max_new_subgradients,
+                    print_png=cb_config.print_png,
+                    png_save_path=png_save_path,
+                    png_title=f"{self.network_name} data_index={data_index} target={ytarget} (native)",
+                    png_every=cb_config.png_every,
+                    stop_when_positive=cb_config.stop_when_positive,
+                    positivity_threshold=cb_config.positivity_threshold,
+                    active_bounds_fixing=cb_config.active_bounds_fixing,
+                    max_subg_by_point=cb_config.max_subg_by_point,
+                )
             status = cb_status or "optimal"
         except Exception as e:
             import traceback
