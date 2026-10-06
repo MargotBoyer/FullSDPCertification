@@ -513,6 +513,7 @@ class Certification_Problem:
                     dualizable_names,
                     add_batch_size=cb_config.add_batch_size,
                     theta_drop_tol=cb_config.theta_drop_tol,
+                    max_pool_size=cb_config.max_pool_size,
                     max_pool_updates=cb_config.max_rounds,
                     max_iter=cb_config.max_iter,
                     term_relprec=cb_config.term_relprec,
@@ -528,6 +529,7 @@ class Certification_Problem:
                     stop_when_positive=cb_config.stop_when_positive,
                     positivity_threshold=cb_config.positivity_threshold,
                     active_bounds_fixing=cb_config.active_bounds_fixing,
+                    sgnorm_term_tol=cb_config.sgnorm_term_tol,
                 )
             else:
                 lb, _theta_best, n_iter, cb_status = solve_native_conicbundle_dual(
@@ -763,34 +765,77 @@ class Certification_Problem:
 
 
 
-class _Tee:
-    """Write to multiple streams simultaneously (e.g. stdout + log file).
+class _OSLevelTee:
+    """Duplique TOUT ce qui s'ecrit sur les descripteurs de fichier OS 1
+    (stdout) et 2 (stderr) vers le terminal d'origine ET un fichier de log, via
+    un sous-processus `tee` -- contrairement a une simple reaffectation de
+    sys.stdout/sys.stderr au niveau Python (l'ancien mecanisme, classe `_Tee`,
+    retiree), ceci capture aussi les ecritures directes des bibliotheques C/C++
+    (MOSEK, ConicBundle : printf/std::cout, ex. "**** WARNING:
+    FunctionProblem::add_variable()..."), jusqu'ici invisibles dans run.log car
+    elles court-circuitent sys.stdout.
 
-    Un flux devenu inutilisable (terminal fermé/detache -> BrokenPipeError,
-    ou tout autre OSError) est abandonne silencieusement plutot que de faire
-    planter tout le run : on a deja perdu un run entier (26h de conic bundle
-    natif) a cause d'un write() sur le stdout d'origine qui a leve apres que
-    le terminal ait ete ferme. Le fichier de log, lui, continue d'etre ecrit.
+    Mecanisme : os.dup2() redirige fd 1/2 vers le bout ecriture d'un pipe dont
+    le bout lecture alimente `tee <log_path>` ; `tee` ecrit lui-meme sur
+    [stdout d'origine duplique, fichier de log]. sys.stdout/sys.stderr ne sont
+    pas touches cote Python -- tout code existant continue de fonctionner sans
+    modification.
+
+    Robustesse terminal ferme (meme incident ayant motive l'ancien `_Tee` :
+    perte d'un run de 26h suite a un write() sur le stdout d'origine qui a leve
+    apres fermeture du terminal) : CPython ignore SIGPIPE par defaut au
+    demarrage (SIG_IGN, disposition au niveau processus) -- un write() sur un
+    pipe/terminal ferme, Python ou C, renvoie EPIPE au lieu de tuer le
+    processus par signal. `tee` (GNU coreutils) continue lui-meme d'ecrire sur
+    ses autres sorties si l'une d'elles echoue (comportement documente), donc
+    le fichier de log continue d'etre alimente meme si le terminal d'origine
+    disparait.
     """
-    def __init__(self, *streams):
-        self._streams = list(streams)
 
-    def write(self, data):
-        for s in list(self._streams):
-            try:
-                s.write(data)
-            except (BrokenPipeError, OSError, ValueError):
-                self._streams.remove(s)
+    def __init__(self, log_path: str, append: bool = False):
+        self.log_path = log_path
+        self.append = append
+        self._tee_proc = None
+        self._saved_stdout_fd = None
+        self._saved_stderr_fd = None
 
-    def flush(self):
-        for s in list(self._streams):
-            try:
-                s.flush()
-            except (BrokenPipeError, OSError, ValueError):
-                self._streams.remove(s)
+    def __enter__(self):
+        import subprocess
 
-    def fileno(self):
-        return self._streams[0].fileno()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        self._saved_stdout_fd = os.dup(1)
+        self._saved_stderr_fd = os.dup(2)
+        pipe_r, pipe_w = os.pipe()
+        tee_args = ["tee", "-a", self.log_path] if self.append else ["tee", self.log_path]
+        try:
+            self._tee_proc = subprocess.Popen(
+                tee_args, stdin=pipe_r,
+                stdout=self._saved_stdout_fd, stderr=self._saved_stderr_fd,
+            )
+        finally:
+            os.close(pipe_r)
+        os.dup2(pipe_w, 1)
+        os.dup2(pipe_w, 2)
+        os.close(pipe_w)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # Restaure fd 1/2 d'origine AVANT de fermer le pipe cote tee (EOF sur
+        # son stdin), pour que tee puisse vider son buffer et se terminer
+        # proprement sans que notre propre sortie se retrouve, entretemps,
+        # nulle part.
+        os.dup2(self._saved_stdout_fd, 1)
+        os.dup2(self._saved_stderr_fd, 2)
+        os.close(self._saved_stdout_fd)
+        os.close(self._saved_stderr_fd)
+        try:
+            self._tee_proc.wait(timeout=10)
+        except Exception:
+            self._tee_proc.kill()
+        return False
 
 
 def _run_orchestrator(certif_problem, network, title_run_full):
@@ -884,19 +929,13 @@ def main(network: str, title_run: str, start: int = None, end: int = None, confi
     log_path = os.path.join(results_dir, "run.log")
 
     try:
-        with open(log_path, "w") as log_file:
-            original_stdout, original_stderr = sys.stdout, sys.stderr
-            sys.stdout = _Tee(original_stdout, log_file)
-            sys.stderr = _Tee(original_stderr, log_file)
+        with _OSLevelTee(log_path, append=False):
             try:
                 certif_problem.solve(title_run_for_solve, start=start, end=end, include_indices=include_indices)
             except Exception:
                 import traceback
                 traceback.print_exc()
                 raise
-            finally:
-                sys.stdout = original_stdout
-                sys.stderr = original_stderr
         print(f"Log saved → {log_path}")
     finally:
         if not is_worker:
@@ -944,10 +983,7 @@ def main_resume(run_folder: str):
 
     log_path = run_folder / "resume.log"
     try:
-        with open(log_path, "a") as log_file:
-            original_stdout, original_stderr = sys.stdout, sys.stderr
-            sys.stdout = _Tee(original_stdout, log_file)
-            sys.stderr = _Tee(original_stderr, log_file)
+        with _OSLevelTee(str(log_path), append=True):
             try:
                 certif_problem.solve(title_run, skip_indices=skip_indices, skip_pairs=skip_pairs,
                                      resume=True, start=start, end=end)
@@ -955,9 +991,6 @@ def main_resume(run_folder: str):
                 import traceback
                 traceback.print_exc()
                 raise
-            finally:
-                sys.stdout = original_stdout
-                sys.stderr = original_stderr
         print(f"Resume log saved → {log_path}")
     finally:
         new_fully_done, new_pairs = find_processed_indices(run_folder)

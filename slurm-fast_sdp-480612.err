@@ -1,0 +1,14 @@
+Loading pytorch-gpu/py3/2.0.0
+  Loading requirement: cuda/11.7.1 nccl/2.12.12-1-cuda cudnn/8.5.0.96-11.7-cuda
+    gcc/8.5.0 openmpi/4.1.1-cuda intel-mkl/2020.4 magma/2.7.0-cuda sox/14.4.2
+    sparsehash/2.0.3 libjpeg-turbo/2.1.3 ffmpeg/N-94431
+Unloading openmpi/4.1.1-cuda
+  Unloading dependent: pytorch-gpu/py3/2.0.0
+  Unloading useless requirement: ffmpeg/N-94431 libjpeg-turbo/2.1.3
+    sparsehash/2.0.3 sox/14.4.2 magma/2.7.0-cuda intel-mkl/2020.4 gcc/8.5.0
+    cudnn/8.5.0.96-11.7-cuda nccl/2.12.12-1-cuda cuda/11.7.1
+Loading openmpi/4.1.1
+  Loading requirement: gcc/8.5.0 intel-compilers/19.1.3
+/lustre/fswork/projects/rech/llc/uvq13au/venvs/fastsdp/lib/python3.10/site-packages/torch/_jit_internal.py:874: FutureWarning: ignore(True) has been deprecated. TorchScript will now drop the function call on compilation. Use torch.jit.unused now. {}
+  warnings.warn(
+[2026-10-02T02:55:25.269] error: Detected 1 oom_kill event in StepId=480612.batch. Some of the step tasks have been OOM Killed.

@@ -779,6 +779,7 @@ def solve_native_conicbundle_dynamic(
     all_dualizable_names: List[str],
     add_batch_size: int = 50,
     theta_drop_tol: float = 1e-8,
+    max_pool_size: Optional[int] = None,
     max_pool_updates: int = 100,
     max_iter: int = 500,
     term_relprec: float = 1e-7,
@@ -796,6 +797,7 @@ def solve_native_conicbundle_dynamic(
     png_every: int = 10,
     stop_when_positive: bool = True,
     positivity_threshold: float = 1e-6,
+    sgnorm_term_tol: Optional[float] = None,
 ) -> Tuple[float, Dict, int, Optional[str]]:
     """
     ATTENTION -- limite de fiabilite connue (investigation data_index=23,
@@ -904,6 +906,7 @@ def solve_native_conicbundle_dynamic(
     time_history: List[float] = []
     pretreatment_history: List[float] = []
     solve_time_history: List[float] = []
+    sgnorm_history: List[float] = []
 
     bundlesize_c = ctypes.c_int(0)
     new_subgrads_c = ctypes.c_int(0)
@@ -916,7 +919,7 @@ def solve_native_conicbundle_dynamic(
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow([
             "oracle_call", "h", "best_h", "u", "bundle_size", "pool_size",
-            "time_s", "pretreatment_s", "mosek_solve_s",
+            "time_s", "pretreatment_s", "mosek_solve_s", "sgnorm",
         ])
 
     def _write_csv_row():
@@ -926,6 +929,7 @@ def solve_native_conicbundle_dynamic(
             state["n_calls"], h_history[-1], best_h_history[-1], u_history[-1],
             bundle_size_history[-1], pool_size_history[-1],
             time_history[-1], pretreatment_history[-1], solve_time_history[-1],
+            sgnorm_history[-1],
         ])
         csv_file.flush()
 
@@ -939,6 +943,7 @@ def solve_native_conicbundle_dynamic(
                 h_history, u_history, bundle_size_history, png_save_path,
                 title=png_title, best_h_history=best_h_history,
                 n_serious_history=n_serious_history,
+                sgnorm_history=sgnorm_history,
                 time_history=time_history,
                 pretreatment_history=pretreatment_history,
                 solve_time_history=solve_time_history,
@@ -998,6 +1003,7 @@ def solve_native_conicbundle_dynamic(
             time_history.append(calib_elapsed)
             pretreatment_history.append(res0.get("pretreatment_time", float("nan")))
             solve_time_history.append(res0.get("solve_time", float("nan")))
+            sgnorm_history.append(float("nan"))  # cb_construct_problem pas encore appele a ce stade
             _write_csv_row()
     elif print_level >= 0:
         print(f"[cb_native dynamic] ECHEC de la calibration : resolve_dualized(theta={{}}) "
@@ -1034,9 +1040,10 @@ def solve_native_conicbundle_dynamic(
     # Pk). Cause racine non identifiee (tierce librairie C, crash non
     # rattrapable cote Python) -- cf. task-dynamic-conic-bundle.md pour le
     # detail de l'investigation. On reste donc SANS extension de sous-gradient :
-    # cb_add_function() recoit subgext=None, primaldim=0 (comme avant cette
-    # investigation), et cb_reinit_function_model() est appele a chaque maj du
-    # pool (cf. plus bas) pour eviter le theta-NaN observe sans ce filet.
+    # cb_add_function() recoit subgext=None, primaldim=0. cb_reinit_function_model()
+    # (qui effacait tout le bundle a chaque maj du pool par precaution) a ete
+    # retire a titre de test -- cf. commentaire detaille plus bas, dans la
+    # boucle de maj du pool.
 
     def oracle(function_key, arg_p, relprec, max_subg,
                objective_value_p, n_subgrads_p, subg_values_p, subgradients_p, primal_p):
@@ -1110,6 +1117,7 @@ def solve_native_conicbundle_dynamic(
             time_history.append(call_elapsed)
             pretreatment_history.append(res.get("pretreatment_time", float("nan")))
             solve_time_history.append(res.get("solve_time", float("nan")))
+            sgnorm_history.append(lib.cb_get_sgnorm(p))
             _write_csv_row()
             if png_every and state["n_calls"] % png_every == 0:
                 _refresh_png()
@@ -1209,6 +1217,22 @@ def solve_native_conicbundle_dynamic(
 
             term_code = lib.cb_termination_code(p)
 
+            if sgnorm_term_tol is not None and lib.cb_get_sgnorm(p) <= sgnorm_term_tol:
+                # Meme critere que MIQCR (solver_sdp_mixed.c::run_conic_bundle_mixed,
+                # boucle externe : continue tant que cb_get_sgnorm(p) > EPS_TERM_CB).
+                # sgnorm = norme du sous-gradient agrege au centre courant -- petite
+                # => le modele de coupes est deja quasi plat autour du centre pour le
+                # POOL ACTUEL, peu de chances qu'un pas de descente supplementaire
+                # avance beaucoup avant la prochaine maj de pool. Verifie APRES
+                # termination_code (qui reste la condition d'arret primaire/fiable) :
+                # celle-ci est un filet de securite additionnel, pas un remplacement.
+                stop_reason = "sgnorm_converged"
+                if print_level >= 0:
+                    print(f"[cb_native dynamic] sgnorm={lib.cb_get_sgnorm(p):.6g} <= "
+                          f"sgnorm_term_tol={sgnorm_term_tol} -- arret, n_iter={n_iter}, "
+                          f"pool={len(active_names)}/{n_total}.")
+                break
+
             if n_pool_updates >= max_pool_updates:
                 if term_code != 0:
                     if print_level >= 0:
@@ -1223,28 +1247,71 @@ def solve_native_conicbundle_dynamic(
                 continue
 
             # --- Mise a jour du pool (equivalent MIQCR, sans redemarrer le bundle) ---
+            # Critere de retrait ET d'ajout tous deux bases sur la MEME notion de
+            # violation primale de X_last, a la maniere de MIQCR
+            # (cb_get_approximate_slacks/purge_constraints_not_violated dans
+            # solver_sdp_mixed.c::run_conic_bundle_mixed) -- PAS sur theta (dual) au
+            # centre comme avant ce fix. Avant : le retrait lisait cb_get_center()
+            # (dual, au centre ACCEPTE) alors que l'ajout lisait la violation
+            # primale du DERNIER X essaye par l'oracle (potentiellement un point
+            # d'essai intermediaire d'un pas nul, pas le centre) -- deux signaux de
+            # nature ET de point differents, confirme responsable du cycle a 2
+            # etats observe concretement (data_index=59, UntargetedSDP, +50 -50 en
+            # alternance infinie). En alignant les deux criteres sur la violation
+            # primale du MEME X_last, une contrainte ne peut plus etre
+            # simultanement "la plus violee" (candidate a l'ajout) et "satisfaite
+            # avec marge" (candidate au retrait) -- elimine le conflit par
+            # construction. Contrairement a MIQCR, pas d'agregation sur l'historique
+            # du bundle (juste le dernier X essaye, comme pour most_violated deja) :
+            # une heuristique plus simple, mais qui ne touche pas a
+            # subgext/cb_get_approximate_primal (donc aucun risque de segfault,
+            # cf. investigation primal dense a 395k -> crash ConicBundle).
             m_now = len(active_names)
-            center = np.zeros(m_now, dtype=np.float64)
-            rc_c = lib.cb_get_center(p, center.ctypes.data_as(_dbl_p))
-            if rc_c != 0:
-                break  # pas de centre disponible (ne devrait pas arriver si rc==0 ci-dessus)
+            X_last = state["last_X"]
+            if X_last is None:
+                break  # pas encore de primal disponible (ne devrait pas arriver si rc==0 ci-dessus)
 
-            keep_mask = np.abs(center) >= theta_drop_tol
+            g_active = np.array([
+                _dualized_inner_product(by_name[n], X_last) - by_name[n]["rhs"]
+                for n in active_names
+            ])
+            # Garder si encore (quasi-)violee (g >= -tol) ; retirer si satisfaite
+            # avec une marge > tol (g < -tol). Meme seuil theta_drop_tol
+            # qu'avant, desormais applique a une violation primale plutot qu'a une
+            # valeur duale -- unites differentes, mais meme role de "pres de zero".
+            keep_mask = g_active >= -theta_drop_tol
             dropped_names = [active_names[i] for i in range(m_now) if not keep_mask[i]]
 
-            X_last = state["last_X"]
             most_violated: List[str] = []
-            if X_last is not None:
-                active_set = set(active_names)
-                inactive_names = [n for n in all_dualizable_names if n not in active_set]
-                if inactive_names:
-                    viol = {
-                        n: _dualized_inner_product(by_name[n], X_last) - by_name[n]["rhs"]
-                        for n in inactive_names
-                    }
-                    most_violated = sorted(
-                        (n for n, g in viol.items() if g > 0), key=lambda n: -viol[n]
-                    )[:add_batch_size]
+            active_set = set(active_names)
+            inactive_names = [n for n in all_dualizable_names if n not in active_set]
+            if inactive_names:
+                viol = {
+                    n: _dualized_inner_product(by_name[n], X_last) - by_name[n]["rhs"]
+                    for n in inactive_names
+                }
+                most_violated = sorted(
+                    (n for n, g in viol.items() if g > 0), key=lambda n: -viol[n]
+                )[:add_batch_size]
+
+            if max_pool_size is not None:
+                # Plafond STRICT sur le nombre de contraintes simultanement dualisees
+                # dans l'objectif (dimension active de ConicBundle) -- decouple de
+                # all_dualizable_names, qui peut rester l'univers candidat complet
+                # (toutes couches, factor=1 ou presque) sans que celui-ci ne pousse
+                # jamais le pool ACTIF au-dela de ce plafond. Observe concretement
+                # (data_index=59, UntargetedSDP, RLT, factor=1, univers candidat a
+                # 180774) : sans ce plafond, le pool actif grossit librement round
+                # apres round (50 -> 614+) et finit par rendre le problem MOSEK
+                # instable numeriquement (coefficients de l'ordre de 1e+203,
+                # rescode.err_sym_mat_huge) -- pas un bug de taille de l'univers
+                # candidat en soi, mais du nombre de theta_r simultanement actifs
+                # dans l'objectif. On garde les most_violated les plus prioritaires
+                # (deja tries par violation decroissante) dans la limite de la place
+                # disponible une fois les retraits de ce round pris en compte.
+                m_after_drop = m_now - len(dropped_names)
+                room = max(0, max_pool_size - m_after_drop)
+                most_violated = most_violated[:room]
 
             if not dropped_names and not most_violated:
                 # Pool stable (rien a ajouter/retirer) -- n'arreter que si CE pool
@@ -1379,39 +1446,39 @@ def solve_native_conicbundle_dynamic(
                     assert rc_r == 0, f"cb_reassign_variables: rc={rc_r}"
 
             if dropped_names or most_violated:
-                # Force le recalcul du modele de fonction plutot que de compter sur
-                # l'hypothese "valeurs a zero => rien a recalculer" documentee pour
-                # cb_append_variables/cb_reassign_variables : nos variables retirees
-                # sont seulement PROCHES de zero (|theta_r| < theta_drop_tol), pas
-                # EXACTEMENT zero -- observe concretement : des theta contenant des
-                # NaN sur plusieurs composantes a la fois juste apres une mise a jour
-                # du pool (cf. investigation blob_4x10), plausible violation de cette
-                # hypothese laissant le modele de bundle dans un etat incoherent.
-                # Un vrai fix (cb_subgextp + primaldim>0, extension du sous-gradient
-                # sans tout effacer) a ete implemente et VALIDE fonctionnellement
-                # (callback d'extension correct, verifie sur plusieurs rounds), mais
-                # provoque un SEGFAULT natif deterministe apres un nombre cumule
-                # d'appels oracle sur ce probleme tres mal conditionne et au primal
-                # enorme (395366 valeurs) -- cf. investigation data_index=59
-                # UntargetedSDP, dualize=[RLT, ReLU_quad]. Cause racine non
-                # identifiee (tierce librairie C, non rattrapable cote Python) --
-                # on revient donc a ce reinit systematique (sans cb_subgextp), plus
-                # lent/sous-optimal (le bundle est perdu a chaque maj du pool) mais
-                # sans risque de crash silencieux.
-                rc_reinit = lib.cb_reinit_function_model(p, function_key)
-                if rc_reinit != 0 and print_level >= 0:
-                    print(f"[cb_native dynamic] cb_reinit_function_model a echoue : "
-                          f"rc={rc_reinit} (round {n_pool_updates})")
-
-                # Reinitialise les compteurs d'echec numeriques (cb_cinterface.h :
-                # "may be useful if this caused premature termination" -- fail counts
-                # sur echecs numeriques/modele, PAS le flag "precision relative
-                # atteinte", teste et confirme sans effet sur celui-ci). Gardee par
-                # precaution pour les echecs numeriques genuins ; le vrai fix pour la
-                # terminaison prematuree constatee (n_iter=1, pool jamais explore
-                # apres agrandissement) est structurel -- cf. le commentaire au debut
-                # de la boucle while externe (ne plus gater cb_do_descent_step() sur
-                # cb_termination_code()).
+                # NE PLUS appeler cb_reinit_function_model() ici -- RETIRE A TITRE DE
+                # TEST (2e tentative, cf. historique ci-dessous). D'apres la doc
+                # cb_cinterface.h, le comportement PAR DEFAUT de cb_append_variables/
+                # cb_reassign_variables n'est PAS de tout effacer : "the old function
+                # values will be marked as outdated and will be recomputed at the next
+                # call" -- seules les coupes affectees par le redimensionnement sont
+                # concernees, pas tout le bundle. Sans cb_subgextp, la librairie ne
+                # peut pas etendre proprement une coupe existante (d'ou le warning
+                # "subgradient extension failed"), mais rien n'indique qu'elle jette
+                # tout le modele pour autant -- probablement juste la coupe
+                # concernee.
+                #
+                # Historique : cb_reinit_function_model() avait ete ajoute suite a des
+                # theta contenant des NaN observes juste apres une maj du pool (cf.
+                # investigation blob_4x10) -- mais le commentaire d'origine qualifiait
+                # deja la cause de simplement "plausible", jamais confirmee. Le NaN
+                # observe a cette epoque est plus probablement du a un bug DIFFERENT,
+                # lui bien identifie et corrige depuis : la mise a jour de
+                # `active_names` qui devait se faire AVANT (pas apres) les appels
+                # cb_append_variables/cb_reassign_variables, a cause du rappel
+                # synchrone de l'oracle par la librairie pendant ces appels (cf.
+                # commentaires plus haut, "IMPORTANT (x2)"). Avec ce fix + la
+                # memoisation de resolve_dualized + le critere de retrait base sur la
+                # violation primale (plus sur theta), cb_reinit_function_model()
+                # pourrait ne plus etre necessaire -- a verifier empiriquement : si le
+                # NaN-theta revient, le reintroduire avec une justification mieux
+                # isolee de ces autres fixes.
+                #
+                # Cout du reinit systematique (confirme concretement avant ce retrait,
+                # cf. conic_bundle_diag_*.csv) : bundle_size plafonne a quelques unites
+                # (0-6) tout au long d'un run de 100+ rounds, le modele de coupes etant
+                # efface a chaque maj de pool -- ConicBundle se comporte alors plus
+                # comme un sous-gradient simple que comme une vraie methode de bundle.
                 lib.cb_clear_fail_counts(p)
 
             if print_level >= 0:

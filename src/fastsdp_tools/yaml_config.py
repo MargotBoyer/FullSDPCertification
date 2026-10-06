@@ -180,6 +180,7 @@ class DynamicConicBundleConfig(BaseModel):
     proximal_u_init: float = 1.0  # Paramètre proximal u (Algorithme 2, ligne 5)
     theta_drop_tol: float = 1.0e-3  # Mode dynamique seulement : retire une contrainte active si |theta_r| < ce seuil (theta = notation main.pdf, sans rapport avec alpha-CROWN)
     add_batch_size: int = 50  # Mode dynamique seulement : nb de contraintes les plus violées ajoutées par round
+    max_pool_size: Optional[int] = None  # Mode dynamique seulement : plafond STRICT sur le nombre de contraintes simultanément dualisées dans l'objectif (dimension active de ConicBundle), découplé de l'univers candidat (`all_dualizable_names`/`factor`, qui peut rester bien plus grand). None = pas de plafond (comportement historique). Sans ce plafond, avec un univers candidat large (factor proche de 1), le pool actif peut grossir librement round après round (observé concrètement : 50 → 614+ contraintes, data_index=59 UntargetedSDP RLT factor=1) et finir par rendre le problème MOSEK numériquement instable (coefficients ~1e+203, rescode.err_sym_mat_huge) — pas un problème de taille de l'univers candidat en soi, mais du nombre de theta_r simultanément actifs dans l'objectif à un instant donné.
     max_rounds: int = 100  # Mode dynamique seulement : nb max de rounds (ajout/retrait) — pas de limite propre sinon, contrairement à max_iter qui ne borne que la boucle interne par round
     max_bundle_size: Optional[int] = None  # Nb max de coupes conservées dans le bundle. None = comportement par défaut de chaque moteur : pour engine="python", pas de cap (borné naturellement par max_iter) — recommandé, cf. task-dynamic-conic-bundle.md "Analyse statique vs dynamique" (cap trop petit face à dim(theta) = arrêt prématuré), éviction FIFO (cf. ProximalBundle) ; pour engine="conicbundle_native", défaut interne de la vraie librairie = 50 (constante codée en dur, FunctionProblem::FunctionProblem dans funproblem.cxx), éviction/agrégation interne à la librairie une fois le plafond atteint. Fixer un entier pour borner le coût du master problem QP à grande échelle (au prix d'une convergence potentiellement plus lente/moins précise si le cap est trop petit).
     bundle_size_factor: Optional[float] = None  # Anciennement nommé `factor` (renommé pour ne plus être confondu avec le vrai paramètre FACTOR de MIQCR, cf. `factor` ci-dessous). Ignoré si max_bundle_size est déjà fourni explicitement (max_bundle_size a toujours priorité). Sinon, si bundle_size_factor n'est pas None, max_bundle_size = max(1, round(bundle_size_factor * nb_contraintes_dualizable)), calculé une fois le modèle construit (les deux moteurs "python" et "conicbundle_native" le supportent). Plafonne le nombre de COUPES conservées en mémoire dans le bundle ConicBundle (cb_set_max_bundlesize) — n'affecte PAS le nombre de contraintes réellement dualisées (ça, c'est le rôle de `factor`). Doit être dans ]0, 1].
@@ -192,10 +193,18 @@ class DynamicConicBundleConfig(BaseModel):
     stop_when_positive: bool = True  # Arrête le bundle dès qu'une évaluation de h(theta) (n'importe quel point oracle, y compris pas nuls) dépasse positivity_threshold : une seule borne duale valide strictement positive suffit à certifier la robustesse (dualité faible), inutile de continuer à affiner theta. status="reached_positivity" dans results_conic_bundle.csv. Supporté par les deux moteurs ("python" et "conicbundle_native").
     positivity_threshold: float = 1.0e-6  # Seuil utilisé par stop_when_positive.
 
+    sgnorm_term_tol: Optional[float] = None  # engine="conicbundle_native", dynamic=true uniquement : critère d'arrêt additionnel sur ||sous-gradient agrégé|| (cb_get_sgnorm), même rôle que EPS_TERM_CB dans la boucle externe de MIQCR (solver_sdp_mixed.c::run_conic_bundle_mixed : continue tant que cb_get_sgnorm(p) > EPS_TERM_CB). None (défaut) = désactivé, comportement historique inchangé. Vérifié après termination_code (reste la condition d'arrêt primaire), pas un remplacement — un filet de sécurité additionnel pour éviter de tourner sur un pool quasi plat. 0.1 est une valeur de départ raisonnable pour nos tests (cf. investigation oscillation data_index=59).
+
     @validator("positivity_threshold")
     def validate_positivity_threshold(cls, v):
         if v <= 0:
             raise ValueError(f"positivity_threshold doit être strictement positif, reçu {v}.")
+        return v
+
+    @validator("sgnorm_term_tol")
+    def validate_sgnorm_term_tol(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError(f"sgnorm_term_tol doit être strictement positif ou None, reçu {v}.")
         return v
 
 

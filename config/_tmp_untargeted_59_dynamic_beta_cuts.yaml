@@ -64,4 +64,5 @@ models:
     add_batch_size: 50
     theta_drop_tol: 1.0e-03
     max_rounds: 100
+    sgnorm_term_tol: 0.1
   use_compact_add_rlt: true

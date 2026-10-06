@@ -1,0 +1,394 @@
+Recompilation de ConicBundle (MODE=OPTI) + du pont natif...
+make: Entering directory '/lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle'
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/memarray.cxx -o OPTI.linux.x86_64.g++/memarray.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/CBSolver.cxx -o OPTI.linux.x86_64.g++/CBSolver.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatCBSolver.cxx -o OPTI.linux.x86_64.g++/MatCBSolver.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/CFunction.cxx -o OPTI.linux.x86_64.g++/CFunction.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/CB_CSolver.cxx -o OPTI.linux.x86_64.g++/CB_CSolver.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatNBSolver.cxx -o OPTI.linux.x86_64.g++/MatNBSolver.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/Nsumproblem.cxx -o OPTI.linux.x86_64.g++/Nsumproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/Nfunproblem.cxx -o OPTI.linux.x86_64.g++/Nfunproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/Nbundle.cxx -o OPTI.linux.x86_64.g++/Nbundle.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatFCBSolver.cxx -o OPTI.linux.x86_64.g++/MatFCBSolver.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/problem.cxx -o OPTI.linux.x86_64.g++/problem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/sumproblem.cxx -o OPTI.linux.x86_64.g++/sumproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/funproblem.cxx -o OPTI.linux.x86_64.g++/funproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/bundle.cxx -o OPTI.linux.x86_64.g++/bundle.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/hkweight.cxx -o OPTI.linux.x86_64.g++/hkweight.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/qp_solver.cxx -o OPTI.linux.x86_64.g++/qp_solver.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/qp_sdpblock.cxx -o OPTI.linux.x86_64.g++/qp_sdpblock.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/idscaling.cxx -o OPTI.linux.x86_64.g++/idscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/diagscaling.cxx -o OPTI.linux.x86_64.g++/diagscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/fullscaling.cxx -o OPTI.linux.x86_64.g++/fullscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/lowrankscaling.cxx -o OPTI.linux.x86_64.g++/lowrankscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/diagtrscaling.cxx -o OPTI.linux.x86_64.g++/diagtrscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/fulltrscaling.cxx -o OPTI.linux.x86_64.g++/fulltrscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/lowranktrscaling.cxx -o OPTI.linux.x86_64.g++/lowranktrscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/lowrankSMscaling.cxx -o OPTI.linux.x86_64.g++/lowrankSMscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/lowranktrSMscaling.cxx -o OPTI.linux.x86_64.g++/lowranktrSMscaling.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatConcavefun.cxx -o OPTI.linux.x86_64.g++/MatConcavefun.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatLPfun.cxx -o OPTI.linux.x86_64.g++/MatLPfun.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatLPBCfun.cxx -o OPTI.linux.x86_64.g++/MatLPBCfun.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatConefun.cxx -o OPTI.linux.x86_64.g++/MatConefun.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/coneproblem.cxx -o OPTI.linux.x86_64.g++/coneproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatSDPfun.cxx -o OPTI.linux.x86_64.g++/MatSDPfun.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/lmaxproblem.cxx -o OPTI.linux.x86_64.g++/lmaxproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/coeffmat.cxx -o OPTI.linux.x86_64.g++/coeffmat.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/bigmat.cxx -o OPTI.linux.x86_64.g++/bigmat.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/MatSOCfun.cxx -o OPTI.linux.x86_64.g++/MatSOCfun.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./CBsources/socproblem.cxx -o OPTI.linux.x86_64.g++/socproblem.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/indexmat.cxx -o OPTI.linux.x86_64.g++/indexmat.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/matrix.cxx -o OPTI.linux.x86_64.g++/matrix.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/symmat.cxx -o OPTI.linux.x86_64.g++/symmat.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/eigval.cxx -o OPTI.linux.x86_64.g++/eigval.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/ldl.cxx -o OPTI.linux.x86_64.g++/ldl.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/chol.cxx -o OPTI.linux.x86_64.g++/chol.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/qr.cxx -o OPTI.linux.x86_64.g++/qr.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/trisolve.cxx -o OPTI.linux.x86_64.g++/trisolve.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/nnls.cxx -o OPTI.linux.x86_64.g++/nnls.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/sparssym.cxx -o OPTI.linux.x86_64.g++/sparssym.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/sparsmat.cxx -o OPTI.linux.x86_64.g++/sparsmat.o
+g++ -I./include -I./CBsources -I./Matrix -I./Tools  -DNDEBUG -O3   -W -Wall -pedantic -Wcast-qual -Wwrite-strings -Wnon-virtual-dtor -Wcast-align -Wconversion -Wno-char-subscripts -Wpointer-arith -Wundef -fpermissive -fPIC -c ./Matrix/lanczpol.cxx -o OPTI.linux.x86_64.g++/lanczpol.o
+ar cr lib/libcb.a OPTI.linux.x86_64.g++/memarray.o OPTI.linux.x86_64.g++/CBSolver.o OPTI.linux.x86_64.g++/MatCBSolver.o OPTI.linux.x86_64.g++/CFunction.o OPTI.linux.x86_64.g++/CB_CSolver.o OPTI.linux.x86_64.g++/MatNBSolver.o OPTI.linux.x86_64.g++/Nsumproblem.o OPTI.linux.x86_64.g++/Nfunproblem.o OPTI.linux.x86_64.g++/Nbundle.o OPTI.linux.x86_64.g++/MatFCBSolver.o OPTI.linux.x86_64.g++/problem.o OPTI.linux.x86_64.g++/sumproblem.o OPTI.linux.x86_64.g++/funproblem.o OPTI.linux.x86_64.g++/bundle.o OPTI.linux.x86_64.g++/hkweight.o OPTI.linux.x86_64.g++/qp_solver.o OPTI.linux.x86_64.g++/qp_sdpblock.o OPTI.linux.x86_64.g++/idscaling.o OPTI.linux.x86_64.g++/diagscaling.o OPTI.linux.x86_64.g++/fullscaling.o OPTI.linux.x86_64.g++/lowrankscaling.o OPTI.linux.x86_64.g++/diagtrscaling.o OPTI.linux.x86_64.g++/fulltrscaling.o OPTI.linux.x86_64.g++/lowranktrscaling.o OPTI.linux.x86_64.g++/lowrankSMscaling.o OPTI.linux.x86_64.g++/lowranktrSMscaling.o OPTI.linux.x86_64.g++/MatConcavefun.o OPTI.linux.x86_64.g++/MatLPfun.o OPTI.linux.x86_64.g++/MatLPBCfun.o OPTI.linux.x86_64.g++/MatConefun.o OPTI.linux.x86_64.g++/coneproblem.o OPTI.linux.x86_64.g++/MatSDPfun.o OPTI.linux.x86_64.g++/lmaxproblem.o OPTI.linux.x86_64.g++/coeffmat.o OPTI.linux.x86_64.g++/bigmat.o OPTI.linux.x86_64.g++/MatSOCfun.o OPTI.linux.x86_64.g++/socproblem.o OPTI.linux.x86_64.g++/indexmat.o OPTI.linux.x86_64.g++/matrix.o OPTI.linux.x86_64.g++/symmat.o OPTI.linux.x86_64.g++/eigval.o OPTI.linux.x86_64.g++/ldl.o OPTI.linux.x86_64.g++/chol.o OPTI.linux.x86_64.g++/qr.o OPTI.linux.x86_64.g++/trisolve.o OPTI.linux.x86_64.g++/nnls.o OPTI.linux.x86_64.g++/sparssym.o OPTI.linux.x86_64.g++/sparsmat.o OPTI.linux.x86_64.g++/lanczpol.o 
+ranlib lib/libcb.a
+make: Leaving directory '/lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle'
+make: Entering directory '/lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/src/miqcr_bridge/conicbundle_native'
+g++ -shared -fPIC -o libcb_native.so \
+    -Wl,--whole-archive ../../../Miqcr-1.0_triang_sbb_gurobiter_QCP5/ConicBundle/lib/libcb.a -Wl,--no-whole-archive \
+    -lstdc++ -lm
+>>> libcb_native.so compilée avec succès.
+make: Leaving directory '/lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/src/miqcr_bridge/conicbundle_native'
+Network: _tmp_blob4x10_dynamic_test
+Run name: smoke-test-conicbundle-native
+Job ID: 465098
+Number of CPU :  80
+Loading certification problem from /lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/config/_tmp_blob4x10_dynamic_test.yaml ...
+Loading dataset ...
+config :  {'data': {'name': 'blob', 'path': 'data/datasets/blob_dataset.pth', 'num_classes': 3, 'num_samples': 1000}, 'input_ball': {'norm': 'Linf', 'epsilon': 1}, 'divide_run': 1, 'network': {'name': 'blob_nn_4x10', 'path': 'data/models/blob_adv_blob_nn_4x10.pt', 'K': 5, 'n': [2, 10, 10, 10, 10, 3]}, 'models': [{'certification_model_type': 'UntargetedSDP', 'write_model': False, 'solver': 'mosek_classic', 'cuts': ['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit'], 'RLT_props': [1.0], 'all_combinations_cuts': False, 'CHORDAL_DECOMPOSITION': False, 'LAST_LAYER': False, 'INPUT_IN_VARIABLES': True, 'use_callback': False, 'use_active_neurons': True, 'use_inactive_neurons': False, 'keep_penultimate_actives': True, 'bounds_method': 'IBP', 'dynamic_conic_bundle': {'enabled': True, 'dualize': ['RLT'], 'engine': 'conicbundle_native', 'dynamic': True, 'max_iter': 200, 'term_relprec': 1e-07, 'eval_limit': 500, 'add_batch_size': 20, 'theta_drop_tol': 1e-08, 'max_rounds': 50, 'print_png': True, 'log_every': 5, 'print_level': 0}}]}
+Dataset loaded successfully.
+Loading epsilon ...
+CONFIG  inf CERTIFICATION PROBLEM:      {'data': {'name': 'blob', 'path': 'data/datasets/blob_dataset.pth', 'num_classes': 3, 'num_samples': 1000}, 'input_ball': {'norm': 'Linf', 'epsilon': 1}, 'divide_run': 1, 'network': {'name': 'blob_nn_4x10', 'path': 'data/models/blob_adv_blob_nn_4x10.pt', 'K': 5, 'n': [2, 10, 10, 10, 10, 3]}, 'models': [{'certification_model_type': 'UntargetedSDP', 'write_model': False, 'solver': 'mosek_classic', 'cuts': ['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit'], 'RLT_props': [1.0], 'all_combinations_cuts': False, 'CHORDAL_DECOMPOSITION': False, 'LAST_LAYER': False, 'INPUT_IN_VARIABLES': True, 'use_callback': False, 'use_active_neurons': True, 'use_inactive_neurons': False, 'keep_penultimate_actives': True, 'bounds_method': 'IBP', 'dynamic_conic_bundle': {'enabled': True, 'dualize': ['RLT'], 'engine': 'conicbundle_native', 'dynamic': True, 'max_iter': 200, 'term_relprec': 1e-07, 'eval_limit': 500, 'add_batch_size': 20, 'theta_drop_tol': 1e-08, 'max_rounds': 50, 'print_png': True, 'log_every': 5, 'print_level': 0}}]}
+Epsilon: 1, Norm: Linf
+Network loaded successfully.
+Data name from config: blob
+Initializing Certification Problem ...
+Models in certification problem: [SDPSolverConfig(certification_model_type='UntargetedSDP', cuts=['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit'], all_combinations_cuts=False, RLT_props=[1.0], CHORDAL_DECOMPOSITION=False, LAST_LAYER=False, solver='mosek_classic', cp_solver='MOSEK', cp_solver_kwargs=None, use_callback=False, use_active_neurons=True, ultimate_layer_use_active_neurons=100000.0, use_inactive_neurons=False, keep_penultimate_actives=True, use_compact_add_rlt=False, bounds_file=None, L=None, U=None, bounds_method='IBP', bounds_n_runs=1, write_model=False, INPUT_IN_VARIABLES=True, solver_time_limit=7200, dynamic_conic_bundle=DynamicConicBundleConfig(enabled=True, dualize=['RLT'], engine='conicbundle_native', term_relprec=1e-07, eval_limit=500, print_level=0, log_every=5, active_bounds_fixing=True, max_subg_by_point=10, dynamic=True, max_iter=200, C1=0.0001, C2=0.1, proximal_u_init=1.0, theta_drop_tol=1e-08, add_batch_size=20, max_rounds=50, max_bundle_size=None, bundle_size_factor=None, factor=None, max_new_subgradients=None, log_theta_every_n_iter=1, print_png=True, png_every=10, stop_when_positive=True, positivity_threshold=1e-06))]
+Data name in certification problem: blob
+dataset in certification problem: <torch.utils.data.dataset.TensorDataset object at 0x150e3ea0ab60>
+Certification Problem initialized !
+Starting certification problem solving ...
+self.models: [SDPSolverConfig(certification_model_type='UntargetedSDP', cuts=['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit'], all_combinations_cuts=False, RLT_props=[1.0], CHORDAL_DECOMPOSITION=False, LAST_LAYER=False, solver='mosek_classic', cp_solver='MOSEK', cp_solver_kwargs=None, use_callback=False, use_active_neurons=True, ultimate_layer_use_active_neurons=100000.0, use_inactive_neurons=False, keep_penultimate_actives=True, use_compact_add_rlt=False, bounds_file=None, L=None, U=None, bounds_method='IBP', bounds_n_runs=1, write_model=False, INPUT_IN_VARIABLES=True, solver_time_limit=7200, dynamic_conic_bundle=DynamicConicBundleConfig(enabled=True, dualize=['RLT'], engine='conicbundle_native', term_relprec=1e-07, eval_limit=500, print_level=0, log_every=5, active_bounds_fixing=True, max_subg_by_point=10, dynamic=True, max_iter=200, C1=0.0001, C2=0.1, proximal_u_init=1.0, theta_drop_tol=1e-08, add_batch_size=20, max_rounds=50, max_bundle_size=None, bundle_size_factor=None, factor=None, max_new_subgradients=None, log_theta_every_n_iter=1, print_png=True, png_every=10, stop_when_positive=True, positivity_threshold=1e-06))]
+Solving with model: UntargetedSDP
+model dict : certification_model_type='UntargetedSDP' cuts=['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit'] all_combinations_cuts=False RLT_props=[1.0] CHORDAL_DECOMPOSITION=False LAST_LAYER=False solver='mosek_classic' cp_solver='MOSEK' cp_solver_kwargs=None use_callback=False use_active_neurons=True ultimate_layer_use_active_neurons=100000.0 use_inactive_neurons=False keep_penultimate_actives=True use_compact_add_rlt=False bounds_file=None L=None U=None bounds_method='IBP' bounds_n_runs=1 write_model=False INPUT_IN_VARIABLES=True solver_time_limit=7200 dynamic_conic_bundle=DynamicConicBundleConfig(enabled=True, dualize=['RLT'], engine='conicbundle_native', term_relprec=1e-07, eval_limit=500, print_level=0, log_every=5, active_bounds_fixing=True, max_subg_by_point=10, dynamic=True, max_iter=200, C1=0.0001, C2=0.1, proximal_u_init=1.0, theta_drop_tol=1e-08, add_batch_size=20, max_rounds=50, max_bundle_size=None, bundle_size_factor=None, factor=None, max_new_subgradients=None, log_theta_every_n_iter=1, print_png=True, png_every=10, stop_when_positive=True, positivity_threshold=1e-06)
+Running conic bundle certification with solver: UntargetedSDP (dynamic=True)
+Initializing UntargetedSDP...
+Creating list of ytargets...
+K :  5
+self.n :  [ 2 10 10 10 10  3]
+Getting to compute bounds...
+Layer 0, L = [-0.1102449893951416, -0.40903985500335693], U = [1.8897550106048584, 1.590960144996643]
+Layer 1, L = [-0.5634057521820068, -0.3596928119659424, -0.3057141602039337, -3.3873114585876465, -3.7946794033050537, -0.4082011580467224, -2.804176092147827, -3.643556833267212, -0.5061624050140381, -3.2893762588500977], U = [1.5718222856521606, 0.1219034194946289, 0.6104544401168823, 0.6976152658462524, 0.4827468991279602, 1.435499668121338, 0.5140085816383362, 0.6115056276321411, 1.1200129985809326, 2.46844744682312]
+Layer 2, L = [-3.8644721508026123, -1.615971326828003, -1.4500125646591187, -2.9243805408477783, -2.2117836475372314, -0.9389218688011169, -4.557334899902344, -1.0171680450439453, -0.7863177061080933, -1.2508865594863892], U = [4.051107883453369, 1.4100319147109985, 4.323298931121826, 0.146454855799675, 1.3649487495422363, 3.7961130142211914, 0.9124364852905273, 4.053211212158203, 7.936269760131836, 4.396883487701416]
+Layer 3, L = [-10.50784683227539, -6.1644697189331055, -17.304454803466797, -4.132903099060059, -2.748539686203003, -14.999919891357422, -11.681246757507324, -5.329438209533691, -3.9433200359344482, -3.768991231918335], U = [3.389090061187744, 3.7493350505828857, 0.9869645833969116, 8.549368858337402, 18.995115280151367, 2.406825542449951, 4.742610454559326, 13.122553825378418, 13.187562942504883, 17.700122833251953]
+Layer 4, L = [-24.3080997467041, -37.448856353759766, -26.06193733215332, -22.511022567749023, -3.084906816482544, -27.041397094726562, -21.534242630004883, -47.70549774169922, -62.70991897583008, -9.802534103393555], U = [37.749996185302734, 12.417274475097656, 50.139068603515625, 42.88873291015625, 53.36161422729492, 7.259803771972656, 15.712552070617676, 33.90330505371094, 8.034283638000488, 11.549935340881348]
+Layer 5, L = [-161.76376342773438, -102.10079193115234, -55.76152038574219], U = [55.99892807006836, 56.662841796875, 237.16928100585938]
+compute bounds time créé dans :  UntargetedSDP
+STUDY : use active neurons:  True use inactive neurons:  False
+STUDY : Nb Stable neurons :  0
+Number of cuts to test: 1
+Cuts to test: [['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit']]
+Initializing MosekClassicHandler
+
+ 
+ folder name dans handler:  /lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/results/benchmark/blob_nn_4x10-1/2026_10_01_19h15_07s_smoke-test-conicbundle-native/part_0_1
+LAST_LAYER in resolve_layer_groups :  False
+K :  5
+CHORDAL_DECOMPOSITION  in resolve layer groups:  False
+INPUT_IN_VARIABLES in resolve_layer_groups :  True
+ytargets in UntargetedSDP: [0, 1]
+Adjusting MOSEK solver parameters
+MOSEK time limit set to 7200s
+Making objective ...
+Initializing variables...
+CALLBACK num variables : 2116
+Adding ReLU constraints for layer 1
+Adding ReLU constraints for layer 2
+Adding ReLU constraints for layer 3
+Adding ReLU constraints for layer 4
+Adding quadratic bounds constraint
+Adding quadratic bounds constraint for layer 0
+Adding quadratic bounds constraint for layer 1
+Adding quadratic bounds constraint for layer 2
+Adding quadratic bounds constraint for layer 3
+Adding quadratic bounds constraint for layer 4
+Adding RLT constraint
+Indexes pruned for layer 1 : []
+Indexes pruned for layer 2 : []
+Indexes pruned for layer 3 : []
+Indexes pruned for layer 4 : []
+CALLBACK : RLT = 320
+Adding first term equal zero constraint
+CALLBACK : Ending constraints. Total number of constraints :  1383
+Cuts in _write_presolve_row:  ['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit']
+Number of constraints before optimization:  1383
+Number of variables before optimization:  2116
+All possible cuts:  ['RLT', 'triangularization', 'McCormick_beta_z', 'beta_logits_comparaison', 'beta_logits_comparaison_big_M', 'sum_beta_logits_equal_logit']
+Cuts added to dic for _write_presolve_row:  {'RLT': True, 'triangularization': True, 'McCormick_beta_z': True, 'beta_logits_comparaison': True, 'beta_logits_comparaison_big_M': True, 'sum_beta_logits_equal_logit': True}
+Writing pre-solve row to results.csv with data_index: 0 target: None
+Pre-solve row written to results.csv with data_index: 0 target: None
+Pre-solve row written to results.csv with 1383 constraints and 2116 variables.
+INFO     19:15:28     [objective_classic.py:97] Adding Objective to the task
+CALLBACK : Number of constraints : 1383
+  [cb_native dynamic calibration] h(0)=-65.745825 pool_initial=20/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+  [cb_native dynamic oracle #5] h=-52.456286 best=-52.456286 pool=40/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 1: +20 -6 (pool=34/960)
+[cb_native dynamic] round 2: +20 -5 (pool=49/960)
+  [cb_native dynamic oracle #10] h=-40.526303 best=-40.526303 pool=49/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 3: +20 -5 (pool=64/960)
+  [cb_native dynamic oracle #15] h=-33.834871 best=-33.834871 pool=64/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 4: +20 -5 (pool=79/960)
+  [cb_native dynamic oracle #20] h=-32.189087 best=-32.189087 pool=79/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 5: +20 -4 (pool=95/960)
+  [cb_native dynamic oracle #25] h=-31.379215 best=-31.379215 pool=95/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 6: +20 -10 (pool=105/960)
+  [cb_native dynamic oracle #30] h=-30.349192 best=-30.349192 pool=125/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 7: +20 -8 (pool=117/960)
+[cb_native dynamic] round 8: +20 -6 (pool=131/960)
+  [cb_native dynamic oracle #35] h=-29.601168 best=-29.601168 pool=131/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 9: +20 -10 (pool=141/960)
+  [cb_native dynamic oracle #40] h=-61.221921 best=-28.466877 pool=141/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 10: +20 -16 (pool=145/960)
+  [cb_native dynamic oracle #45] h=-26.626313 best=-26.626313 pool=145/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 11: +20 -6 (pool=159/960)
+  [cb_native dynamic oracle #50] h=-31.287057 best=-25.666026 pool=159/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 12: +20 -9 (pool=170/960)
+  [cb_native dynamic oracle #55] h=-25.125045 best=-24.597572 pool=170/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 13: +20 -10 (pool=180/960)
+  [cb_native dynamic oracle #60] h=-23.368531 best=-23.368531 pool=180/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 14: +20 -15 (pool=185/960)
+  [cb_native dynamic oracle #65] h=-22.289372 best=-22.289372 pool=185/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 15: +20 -18 (pool=187/960)
+  [cb_native dynamic oracle #70] h=-22.108810 best=-22.108810 pool=187/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 16: +20 -18 (pool=189/960)
+  [cb_native dynamic oracle #75] h=-21.386234 best=-21.209149 pool=189/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 17: +20 -9 (pool=200/960)
+  [cb_native dynamic oracle #80] h=-21.766741 best=-20.666454 pool=200/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 18: +20 -19 (pool=201/960)
+  [cb_native dynamic oracle #85] h=-21.453527 best=-20.314303 pool=201/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 19: +20 -23 (pool=198/960)
+  [cb_native dynamic oracle #90] h=-23.112511 best=-19.975586 pool=198/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 20: +20 -21 (pool=197/960)
+  [cb_native dynamic oracle #95] h=-82.136922 best=-19.299835 pool=197/960
+  [cb_native dynamic oracle #100] h=-19.967429 best=-19.299835 pool=197/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 21: +20 -28 (pool=189/960)
+  [cb_native dynamic oracle #105] h=-23.319337 best=-18.362686 pool=189/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 22: +20 -15 (pool=194/960)
+  [cb_native dynamic oracle #110] h=-17.962539 best=-17.962539 pool=194/960
+  [cb_native dynamic oracle #115] h=-20.883658 best=-17.962539 pool=194/960
+  [cb_native dynamic oracle #120] h=-17.688748 best=-17.688748 pool=194/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 23: +20 -27 (pool=187/960)
+  [cb_native dynamic oracle #125] h=-87.653561 best=-17.645323 pool=187/960
+  [cb_native dynamic oracle #130] h=-20.178338 best=-17.645323 pool=187/960
+  [cb_native dynamic oracle #135] h=-18.475723 best=-17.226663 pool=187/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 24: +20 -31 (pool=176/960)
+  [cb_native dynamic oracle #140] h=-17.128837 best=-17.128837 pool=176/960
+  [cb_native dynamic oracle #145] h=-21.120405 best=-17.128837 pool=176/960
+  [cb_native dynamic oracle #150] h=-17.509768 best=-17.128837 pool=176/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+  [cb_native dynamic oracle #155] h=-16.768355 best=-16.768355 pool=196/960
+[cb_native dynamic] round 25: +20 -24 (pool=172/960)
+  [cb_native dynamic oracle #160] h=-16.631860 best=-16.631860 pool=172/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 26: +20 -19 (pool=173/960)
+  [cb_native dynamic oracle #165] h=-16.339947 best=-16.339947 pool=173/960
+  [cb_native dynamic oracle #170] h=-19.308086 best=-16.339947 pool=173/960
+  [cb_native dynamic oracle #175] h=-16.707035 best=-16.339947 pool=173/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 27: +20 -23 (pool=170/960)
+  [cb_native dynamic oracle #180] h=-15.985623 best=-15.985623 pool=170/960
+  [cb_native dynamic oracle #185] h=-21.393713 best=-15.985623 pool=170/960
+  [cb_native dynamic oracle #190] h=-16.165305 best=-15.985623 pool=170/960
+  [cb_native dynamic oracle #195] h=-15.695477 best=-15.695477 pool=170/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 28: +20 -8 (pool=182/960)
+  [cb_native dynamic oracle #200] h=-18.911194 best=-15.695477 pool=182/960
+  [cb_native dynamic oracle #205] h=-15.651966 best=-15.651966 pool=182/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 29: +20 -16 (pool=186/960)
+  [cb_native dynamic oracle #210] h=-53.796024 best=-15.561080 pool=186/960
+  [cb_native dynamic oracle #215] h=-18.839311 best=-15.561080 pool=186/960
+  [cb_native dynamic oracle #220] h=-15.585215 best=-15.561080 pool=186/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 30: +20 -16 (pool=190/960)
+  [cb_native dynamic oracle #225] h=-226.008242 best=-15.300154 pool=190/960
+  [cb_native dynamic oracle #230] h=-20.633307 best=-15.300154 pool=190/960
+  [cb_native dynamic oracle #235] h=-16.528371 best=-15.300154 pool=190/960
+  [cb_native dynamic oracle #240] h=-15.450750 best=-15.300154 pool=190/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 31: +20 -33 (pool=177/960)
+  [cb_native dynamic oracle #245] h=-46.975774 best=-15.027308 pool=177/960
+  [cb_native dynamic oracle #250] h=-19.832355 best=-15.027308 pool=177/960
+  [cb_native dynamic oracle #255] h=-15.357844 best=-15.027308 pool=177/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 32: +20 -11 (pool=186/960)
+  [cb_native dynamic oracle #260] h=-14.759180 best=-14.759180 pool=186/960
+  [cb_native dynamic oracle #265] h=-33.449760 best=-14.759180 pool=186/960
+  [cb_native dynamic oracle #270] h=-16.931009 best=-14.759180 pool=186/960
+  [cb_native dynamic oracle #275] h=-14.718821 best=-14.718821 pool=186/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 33: +20 -23 (pool=183/960)
+  [cb_native dynamic oracle #280] h=-14.468301 best=-14.468301 pool=183/960
+  [cb_native dynamic oracle #285] h=-16.679011 best=-14.468301 pool=183/960
+  [cb_native dynamic oracle #290] h=-15.041829 best=-14.468301 pool=183/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 34: +20 -16 (pool=187/960)
+  [cb_native dynamic oracle #295] h=-14.295971 best=-14.295971 pool=187/960
+  [cb_native dynamic oracle #300] h=-32.767837 best=-14.295971 pool=187/960
+  [cb_native dynamic oracle #305] h=-15.146713 best=-14.295971 pool=187/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+  [cb_native dynamic oracle #310] h=-14.213863 best=-14.213863 pool=207/960
+[cb_native dynamic] round 35: +20 -12 (pool=195/960)
+  [cb_native dynamic oracle #315] h=-14.246444 best=-14.213863 pool=195/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 36: +20 -7 (pool=208/960)
+  [cb_native dynamic oracle #320] h=-15.007581 best=-14.187214 pool=208/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 37: +20 -9 (pool=219/960)
+  [cb_native dynamic oracle #325] h=-14.169847 best=-14.169847 pool=219/960
+  [cb_native dynamic oracle #330] h=-14.156597 best=-14.156597 pool=219/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 38: +20 -11 (pool=228/960)
+  [cb_native dynamic oracle #335] h=-14.112740 best=-14.112740 pool=228/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 39: +20 -16 (pool=232/960)
+  [cb_native dynamic oracle #340] h=-14.440268 best=-14.112740 pool=232/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 40: +20 -12 (pool=240/960)
+  [cb_native dynamic oracle #345] h=-14.099826 best=-14.099826 pool=240/960
+  [cb_native dynamic oracle #350] h=-14.333559 best=-14.099826 pool=240/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 41: +20 -28 (pool=232/960)
+  [cb_native dynamic oracle #355] h=-25.534762 best=-14.068964 pool=232/960
+  [cb_native dynamic oracle #360] h=-14.167191 best=-14.068964 pool=232/960
+  [cb_native dynamic oracle #365] h=-13.997588 best=-13.997588 pool=232/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 42: +20 -20 (pool=232/960)
+  [cb_native dynamic oracle #370] h=-14.931995 best=-13.997588 pool=232/960
+  [cb_native dynamic oracle #375] h=-13.987703 best=-13.987703 pool=232/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 43: +20 -20 (pool=232/960)
+  [cb_native dynamic oracle #380] h=-15.264475 best=-13.946994 pool=232/960
+  [cb_native dynamic oracle #385] h=-13.941759 best=-13.941759 pool=232/960
+  [cb_native dynamic oracle #390] h=-13.952796 best=-13.912975 pool=232/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 44: +20 -26 (pool=226/960)
+  [cb_native dynamic oracle #395] h=-21.011518 best=-13.894505 pool=226/960
+  [cb_native dynamic oracle #400] h=-14.068600 best=-13.894505 pool=226/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 45: +20 -20 (pool=226/960)
+  [cb_native dynamic oracle #405] h=-13.870389 best=-13.870389 pool=226/960
+  [cb_native dynamic oracle #410] h=-23.993288 best=-13.870389 pool=226/960
+  [cb_native dynamic oracle #415] h=-16.167732 best=-13.870389 pool=226/960
+  [cb_native dynamic oracle #420] h=-14.255286 best=-13.870389 pool=226/960
+  [cb_native dynamic oracle #425] h=-13.923853 best=-13.870389 pool=226/960
+  [cb_native dynamic oracle #430] h=-13.839419 best=-13.839419 pool=226/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 46: +20 -33 (pool=213/960)
+  [cb_native dynamic oracle #435] h=-13.776411 best=-13.776411 pool=213/960
+  [cb_native dynamic oracle #440] h=-18.216602 best=-13.776411 pool=213/960
+  [cb_native dynamic oracle #445] h=-14.119728 best=-13.776411 pool=213/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 47: +20 -2 (pool=231/960)
+  [cb_native dynamic oracle #450] h=-13.938601 best=-13.740567 pool=231/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 48: +20 -9 (pool=242/960)
+  [cb_native dynamic oracle #455] h=-14.538905 best=-13.722785 pool=242/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 49: +20 -16 (pool=246/960)
+  [cb_native dynamic oracle #460] h=-13.711357 best=-13.711357 pool=246/960
+  [cb_native dynamic oracle #465] h=-13.780717 best=-13.692795 pool=246/960
+**** WARNING: FunctionProblem::add_variable(): subgradient extension failed
+[cb_native dynamic] round 50: +20 -13 (pool=253/960)
+  [cb_native dynamic oracle #470] h=-13.801471 best=-13.681756 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #475] h=-13.640881 best=-13.640881 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #480] h=-13.379087 best=-13.379087 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #485] h=-13.455818 best=-13.241232 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #490] h=-13.195887 best=-13.194978 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #495] h=-13.313859 best=-13.096503 pool=253/960
+  [cb_native dynamic oracle #500] h=-13.039024 best=-13.039024 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #505] h=-13.053578 best=-13.039024 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #510] h=-13.251595 best=-12.978508 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #515] h=-13.028262 best=-12.913652 pool=253/960
+  [cb_native dynamic oracle #520] h=-12.893705 best=-12.893705 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #525] h=-12.867870 best=-12.837171 pool=253/960
+  [cb_native dynamic oracle #530] h=-12.899866 best=-12.834836 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #535] h=-12.846037 best=-12.806326 pool=253/960
+  [cb_native dynamic oracle #540] h=-12.809279 best=-12.805003 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #545] h=-12.816193 best=-12.766692 pool=253/960
+  [cb_native dynamic oracle #550] h=-12.763099 best=-12.763099 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #555] h=-12.753426 best=-12.753426 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #560] h=-12.739173 best=-12.739173 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #565] h=-12.733964 best=-12.732372 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #570] h=-12.724581 best=-12.715006 pool=253/960
+  [cb_native dynamic oracle #575] h=-12.717239 best=-12.709920 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #580] h=-12.726604 best=-12.694867 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #585] h=-12.763818 best=-12.687581 pool=253/960
+  [cb_native dynamic oracle #590] h=-12.698158 best=-12.687581 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+  [cb_native dynamic oracle #595] h=-12.688282 best=-12.680927 pool=253/960
+  [cb_native dynamic oracle #600] h=-12.676948 best=-12.676948 pool=253/960
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint -- pool fige a 253/960, la boucle de descente continue sans plus modifier le pool.
+[cb_native dynamic] max_pool_updates=50 atteint et termination_code=64 -- arret (pool fige a 253/960).
+[cb_native dynamic] n_iter=79 n_oracle_calls=602 n_pool_updates=50 pool_final=253/960 termination_code=64 h_center=-12.674147 best_h=-12.673442 stop_reason=None
+[conic bundle] data_index=0 target=None optimal_value=-12.67344168706426 n_iter=79 (123.43s)
+Log saved → /lustre/fswork/projects/rech/llc/uvq13au/FastSDPCertification/results/benchmark/blob_nn_4x10-1/2026_10_01_19h15_07s_smoke-test-conicbundle-native/part_0_1/run.log
