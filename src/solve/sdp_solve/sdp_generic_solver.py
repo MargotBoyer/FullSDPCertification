@@ -118,6 +118,10 @@ class SDPSolver(Solver):
         self.alpha_2 = kwargs.get("alpha_2")
 
         self.write_model_ptf = kwargs.get("write_model")
+        # Opt-in: keep the full quadratic inter-matrix consistency (6e) instead of the
+        # default linear-only subset (see certification_problem_constraints_division_by_layers.py).
+        # False everywhere except baselines/sdp_bab, which needs it to match LayerSDP (Batten et al. 2021).
+        self.full_quadratic_consistency = kwargs.get("full_quadratic_consistency", False)
 
         logger_mosek.info(f"Model {self.__class__.__name__} initialized.")
 

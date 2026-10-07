@@ -136,10 +136,20 @@ class TargetedSDP(SDPSolver):
 
         _n = _snap()
         if self.CHORDAL_DECOMPOSITION:
-            self.CHORDAL_DECOMPOSITION_rec(only_linear_constraints=True)
+            self.CHORDAL_DECOMPOSITION_rec(only_linear_constraints=not self.full_quadratic_consistency)
         if self.LAST_LAYER:
             self.last_layer_linear_equality()
         self.first_term_equal_zero()
         self._cut_constraint_counts["baseline_other"] = _snap() - _n
 
+        self._add_extra_constraints_hook()
+
         self.handler.Constraints.end_constraints()
+
+    def _add_extra_constraints_hook(self):
+        """No-op by default. Subclasses (e.g. baselines/sdp_bab) override this to add
+        extra constraints after the standard ones, without duplicating add_constraints:
+        end_constraints() is not idempotent (it advances Constraints.current_num_constraint
+        without appending a row), so anything added after super().add_constraints() returns
+        would make the next new_constraint() call index out of range."""
+        pass
