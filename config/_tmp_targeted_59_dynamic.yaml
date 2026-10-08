@@ -47,7 +47,7 @@ models:
     - RLT
     engine: conicbundle_native
     dynamic: true
-    factor: 0.01
+    factor: 1.0
     max_iter: 500
     term_relprec: 1.0e-07
     log_every: 5

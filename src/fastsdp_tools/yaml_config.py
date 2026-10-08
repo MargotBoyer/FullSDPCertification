@@ -182,9 +182,22 @@ class DynamicConicBundleConfig(BaseModel):
     add_batch_size: int = 50  # Mode dynamique seulement : nb de contraintes les plus violées ajoutées par round
     max_pool_size: Optional[int] = None  # Mode dynamique seulement : plafond STRICT sur le nombre de contraintes simultanément dualisées dans l'objectif (dimension active de ConicBundle), découplé de l'univers candidat (`all_dualizable_names`/`factor`, qui peut rester bien plus grand). None = pas de plafond (comportement historique). Sans ce plafond, avec un univers candidat large (factor proche de 1), le pool actif peut grossir librement round après round (observé concrètement : 50 → 614+ contraintes, data_index=59 UntargetedSDP RLT factor=1) et finir par rendre le problème MOSEK numériquement instable (coefficients ~1e+203, rescode.err_sym_mat_huge) — pas un problème de taille de l'univers candidat en soi, mais du nombre de theta_r simultanément actifs dans l'objectif à un instant donné.
     max_rounds: int = 100  # Mode dynamique seulement : nb max de rounds (ajout/retrait) — pas de limite propre sinon, contrairement à max_iter qui ne borne que la boucle interne par round
+    use_subgext: bool = False  # Mode dynamique (engine="conicbundle_native") seulement : active cb_subgextp (extension de sous-gradient via agrégation primale) avec une représentation CREUSE du primal (uniquement les entrées de matrice effectivement référencées par au moins une contrainte DUALIZABLE candidate, pas l'union dense de tous les blocs Pk). Sans ça, le bundle ConicBundle est perdu à chaque mise à jour du pool (cf. doc cb_cinterface.h : "the cutting model of the objective is lost at each addition of constraints" sans ce callback) — confirmé concrètement : bundle_size plafonné à 0-6 tout au long d'un run, convergence nettement plus lente que le moteur statique (qui accumule librement). Une 1re tentative avec un primal DENSE (~395k valeurs, toutes les entrées de tous les blocs) a provoqué un segfault natif déterministe à cette échelle — cette version creuse vise à l'éviter. False (défaut) = comportement historique inchangé, aucune régression pour les runs existants qui ne fixent pas ce paramètre.
     max_bundle_size: Optional[int] = None  # Nb max de coupes conservées dans le bundle. None = comportement par défaut de chaque moteur : pour engine="python", pas de cap (borné naturellement par max_iter) — recommandé, cf. task-dynamic-conic-bundle.md "Analyse statique vs dynamique" (cap trop petit face à dim(theta) = arrêt prématuré), éviction FIFO (cf. ProximalBundle) ; pour engine="conicbundle_native", défaut interne de la vraie librairie = 50 (constante codée en dur, FunctionProblem::FunctionProblem dans funproblem.cxx), éviction/agrégation interne à la librairie une fois le plafond atteint. Fixer un entier pour borner le coût du master problem QP à grande échelle (au prix d'une convergence potentiellement plus lente/moins précise si le cap est trop petit).
     bundle_size_factor: Optional[float] = None  # Anciennement nommé `factor` (renommé pour ne plus être confondu avec le vrai paramètre FACTOR de MIQCR, cf. `factor` ci-dessous). Ignoré si max_bundle_size est déjà fourni explicitement (max_bundle_size a toujours priorité). Sinon, si bundle_size_factor n'est pas None, max_bundle_size = max(1, round(bundle_size_factor * nb_contraintes_dualizable)), calculé une fois le modèle construit (les deux moteurs "python" et "conicbundle_native" le supportent). Plafonne le nombre de COUPES conservées en mémoire dans le bundle ConicBundle (cb_set_max_bundlesize) — n'affecte PAS le nombre de contraintes réellement dualisées (ça, c'est le rôle de `factor`). Doit être dans ]0, 1].
-    factor: Optional[float] = None  # Équivalent du VRAI paramètre FACTOR de la librairie MIQCR d'origine (Miqcr-1.0_.../src/parameters.h, "Proportion of the considered constraints into the SDP solver" ; CLAUDE.md MIQCR section 7 : psdp->nb_cont = FACTOR * psdp->length). Détermine la proportion des contraintes DUALIZABLE candidates qui sont EFFECTIVEMENT dualisées (reçoivent un theta_r) dans la relaxation lagrangienne de l'objectif -- les autres sont totalement absentes du modèle (ni dures, ni pénalisées), exactement comme dans MIQCR. None (défaut) = toutes les contraintes DUALIZABLE candidates sont dualisées (comportement historique). Sélection déterministique (les premières factor*m contraintes dans l'ordre renvoyé par get_dualizable_constraint_names -- pas de critère de magnitude/violation pour l'instant, contrairement à l'heuristique top-p% de RLT_props). engine="conicbundle_native" uniquement pour l'instant. Doit être dans ]0, 1].
+    factor: Optional[float] = None  # Équivalent du VRAI paramètre FACTOR de la librairie MIQCR d'origine (Miqcr-1.0_.../src/parameters.h, "Proportion of the considered constraints into the SDP solver" ; CLAUDE.md MIQCR section 7 : psdp->nb_cont = FACTOR * psdp->length). Détermine la proportion des contraintes DUALIZABLE candidates qui sont EFFECTIVEMENT dualisées (reçoivent un theta_r) dans la relaxation lagrangienne de l'objectif -- les autres sont totalement absentes du modèle (ni dures, ni pénalisées), exactement comme dans MIQCR. None (défaut) = toutes les contraintes DUALIZABLE candidates sont dualisées (comportement historique). Sélection déterminée par `factor_constraint_heuristic` ci-dessous. engine="conicbundle_native" uniquement pour l'instant. Doit être dans ]0, 1]. Pour dynamic=true, doit être None ou 1.0 (cf. validate_factor_requires_full_universe_in_dynamic) -- la troncature n'a de sens que pour le moteur statique, où chaque contrainte retenue devient une variable ConicBundle permanente.
+
+    factor_constraint_heuristic: str = "positional"  # Méthode de sélection des n_keep=factor*m contraintes réellement dualisées parmi les m candidates DUALIZABLE (ignoré si factor est None). "positional" (défaut, comportement historique) : garde les n_keep premières dans l'ordre de get_dualizable_constraint_names -- BIAISÉ : cet ordre suit la construction des coupes, strictement couche par couche (cf. certification_problem_constraints_rlt.py), donc un factor petit ne retient en pratique QUE les premières couches (confirmé concrètement sur data_index=59 : factor=0.01 => 100% des 1808 contraintes retenues venaient de la couche 0, 0% des couches 1-8). "random_pure" : échantillon uniforme sans remise parmi les m candidates, sans égard à la couche -- lève le biais positionnel mais peut encore sous-représenter certaines couches par pur hasard si elles sont peu nombreuses. "random_layer" : regroupe d'abord les candidates par couche (bloc num_matrix de list_cstr, Phase A garantit qu'une contrainte DUALIZABLE ne référence jamais 2 couches à la fois), puis prélève un nombre égal au hasard dans chaque couche (n_keep // nb_couches), le reste (arrondi + couches trop petites) étant comblé par un tirage aléatoire parmi les contraintes non retenues de toutes les couches -- recommandé quand on veut explicitement garantir une couverture de toutes les couches avec un factor<1.
+    @validator("factor_constraint_heuristic")
+    def validate_factor_constraint_heuristic(cls, v):
+        if v not in ("positional", "random_pure", "random_layer"):
+            raise ValueError(
+                f"factor_constraint_heuristic '{v}' inconnu -- doit être 'positional' "
+                "(comportement historique, biaisé par couche), 'random_pure' (tirage "
+                "uniforme sur tout l'univers candidat) ou 'random_layer' (tirage "
+                "équilibré par couche)."
+            )
+        return v
     max_new_subgradients: Optional[int] = None  # engine="conicbundle_native" uniquement (ignoré par engine="python", qui ne renvoie jamais plus d'un sous-gradient par évaluation) : nb max de nouveaux sous-gradients epsilon renvoyés par appel oracle (cb_set_max_new_subgradients). None = défaut interne de la librairie = 1 (FunctionBundleParameters::FunctionBundleParameters(), funproblem.hxx — PAS 5 comme documenté précédemment). Avec ce défaut, la sonde de coin (cf. max_subg_by_point dans cb_wrapper.solve_native_conicbundle_dual) ne s'exécute JAMAIS : il faut explicitement fixer max_new_subgradients >= 2 pour l'activer.
     log_theta_every_n_iter: int = 1  # Fréquence (en itérations) d'enregistrement de theta_history (0 = jamais)
     print_png: bool = True  # Si true, écrit un PNG de diagnostic par résolution (h(theta)/u/taille du bundle vs itération, cf. dynamic_conic_bundle/plotting.py) dans le dossier du run. Activé par défaut (coût I/O/matplotlib jugé acceptable face à la valeur diagnostique, cf. analyse du blocage data_index=59/target=8) — mettre à false pour un run à grande échelle (des centaines d'échantillons) où ce coût par résolution n'est plus négligeable.
@@ -206,6 +219,30 @@ class DynamicConicBundleConfig(BaseModel):
         if v is not None and v <= 0:
             raise ValueError(f"sgnorm_term_tol doit être strictement positif ou None, reçu {v}.")
         return v
+
+    @model_validator(mode="after")
+    def validate_factor_requires_full_universe_in_dynamic(self) -> "DynamicConicBundleConfig":
+        """factor<1 tronque l'univers candidat POSITIONNELLEMENT (les n_keep premières
+        contraintes dans l'ordre de get_dualizable_constraint_names, pas un échantillon
+        représentatif) -- confirmé concrètement sur data_index=59 : factor=0.01 ne gardait
+        que les RLT de la couche 0 (0% des couches 1-8). En mode dynamique, max_pool_size
+        joue déjà le rôle que `factor` visait (plafonner le nombre de contraintes
+        simultanément dualisées dans l'objectif, cf. incident err_sym_mat_huge) sans ce
+        biais, puisque le pool actif est choisi par violation parmi TOUT l'univers
+        candidat. factor reste nécessaire pour le moteur statique (où chaque candidat
+        devient une variable ConicBundle permanente), donc cette contrainte ne s'applique
+        qu'à dynamic=True."""
+        if self.dynamic and self.factor not in (None, 1.0):
+            raise ValueError(
+                f"factor={self.factor} invalide avec dynamic=true : le moteur dynamique "
+                "doit toujours partir de l'univers candidat complet (factor=1.0 ou None), "
+                "sous peine de reproduire le biais positionnel observé sur data_index=59 "
+                "(factor=0.01 => 100% des contraintes retenues venaient de la couche 0). "
+                "Utiliser max_pool_size pour plafonner le nombre de contraintes "
+                "simultanément dualisées dans l'objectif, et use_subgext=true pour "
+                "conserver le bundle ConicBundle d'un round à l'autre."
+            )
+        return self
 
 
 class SDPSolverConfig(BaseModel):

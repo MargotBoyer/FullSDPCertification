@@ -59,11 +59,25 @@ CB_FUNCTION_TYPE = ctypes.CFUNCTYPE(
     _dbl_p,
 )
 
-# cb_subgextp (extension de sous-gradient via agregation primale) : implemente
-# et valide fonctionnellement (solve_native_conicbundle_dynamic), mais retire
-# suite a un segfault natif deterministe observe a l'echelle de cette librairie
-# sur un primal tres large (cf. commentaire dans la boucle de maj du pool de
-# solve_native_conicbundle_dynamic pour le detail de l'investigation).
+# cb_subgextp (extension de sous-gradient via agregation primale) : int (*cb_subgextp)
+# (void* function_key, double* generating_primal, int n_indices,
+#  int* variable_indices, double* new_subgradient_values)
+# 1re tentative (primal DENSE, toutes les entrees de tous les blocs Pk, ~395k
+# valeurs) : implementee et validee fonctionnellement, mais provoque un segfault
+# natif deterministe a cette echelle (cf. historique dans
+# solve_native_conicbundle_dynamic). Reintroduite ici pour une 2e tentative avec
+# une representation CREUSE du primal (uniquement les entrees de matrice
+# effectivement referencees par au moins une contrainte candidate), activable
+# via le parametre `use_subgext` de solve_native_conicbundle_dynamic (defaut
+# False = comportement actuel inchange, aucune regression si non active).
+CB_SUBGEXT_TYPE = ctypes.CFUNCTYPE(
+    ctypes.c_int,
+    ctypes.c_void_p,
+    _dbl_p,
+    ctypes.c_int,
+    _int_p,
+    _dbl_p,
+)
 
 
 def _build_lib_via_make(expected_path: str) -> None:
@@ -798,6 +812,7 @@ def solve_native_conicbundle_dynamic(
     stop_when_positive: bool = True,
     positivity_threshold: float = 1e-6,
     sgnorm_term_tol: Optional[float] = None,
+    use_subgext: bool = False,
 ) -> Tuple[float, Dict, int, Optional[str]]:
     """
     ATTENTION -- limite de fiabilite connue (investigation data_index=23,
@@ -891,6 +906,95 @@ def solve_native_conicbundle_dynamic(
 
     minus_inf = lib.cb_get_minus_infinity()
     plus_inf = lib.cb_get_plus_infinity()
+
+    # --- Agregation primale CREUSE (subgext), optionnelle -- cf. use_subgext.
+    # 1re tentative (primal DENSE, toutes les entrees de tous les blocs Pk,
+    # ~395366 valeurs) : implementee et validee fonctionnellement (callback
+    # d'extension correct sur plusieurs rounds), mais provoque un SEGFAULT natif
+    # deterministe dans ConicBundle a cette echelle (confirme independant de
+    # max_bundle_size -- le crash se decale mais ne disparait pas). Cette 2e
+    # tentative ne construit que les entrees de matrice EFFECTIVEMENT
+    # referencees par au moins une contrainte DUALIZABLE candidate
+    # (all_dualizable_names) -- primaldim beaucoup plus petit en pratique
+    # (chaque contrainte RLT/McCormick ne touche que 2-4 entrees, avec un fort
+    # recouvrement entre contraintes voisines -- ex. les 3 sous-contraintes
+    # McCormick d'un meme triple (k, neuron_prev, neuron_next) partagent le
+    # meme terme bilineaire). Desactive par defaut (use_subgext=False) :
+    # AUCUN changement de comportement pour les appelants existants qui ne
+    # passent pas ce parametre -- primaldim=0, subgext=None exactement comme
+    # avant son introduction.
+    primaldim = 0
+    touched_entries: List[Tuple[int, int, int]] = []
+    entry_to_idx: Dict[Tuple[int, int, int], int] = {}
+    if use_subgext:
+        touched_set = set()
+        for d in dualized:
+            nm_arr, ii_arr, jj_arr = d["num_matrix"], d["i"], d["j"]
+            for k in range(len(ii_arr)):
+                nm_k, i_k, j_k = int(nm_arr[k]), int(ii_arr[k]), int(jj_arr[k])
+                touched_set.add((nm_k, i_k, j_k) if i_k <= j_k else (nm_k, j_k, i_k))
+        touched_entries = sorted(touched_set)
+        primaldim = len(touched_entries)
+        entry_to_idx = {e: idx for idx, e in enumerate(touched_entries)}
+        if print_level >= 0:
+            print(f"[cb_native dynamic] use_subgext=True : primal creux a "
+                  f"{primaldim} entrees (construit a partir de {n_total} "
+                  f"contraintes candidates).")
+
+    def _flatten_X_sparse(X_by_matrix: Dict[int, np.ndarray]) -> np.ndarray:
+        flat = np.empty(primaldim, dtype=np.float64)
+        for idx, (nm, i, j) in enumerate(touched_entries):
+            flat[idx] = X_by_matrix[nm][i, j]
+        return flat
+
+    def _dualized_inner_product_sparse(d: dict, entry_values) -> float:
+        # Meme formule/convention que _dualized_inner_product (signe/halving
+        # mosek_classic), mais lit dans le vecteur primal CREUX (entry_values,
+        # indexe via entry_to_idx) plutot que dans une matrice dense X[i,j].
+        total = 0.0
+        nm_arr, ii_arr, jj_arr, vv_arr = d["num_matrix"], d["i"], d["j"], d["value"]
+        for k in range(len(ii_arr)):
+            nm_k, i_k, j_k, v_k = (
+                int(nm_arr[k]), int(ii_arr[k]), int(jj_arr[k]), float(vv_arr[k])
+            )
+            key = (nm_k, i_k, j_k) if i_k <= j_k else (nm_k, j_k, i_k)
+            val = entry_values[entry_to_idx[key]]
+            if i_k == j_k:
+                total += v_k * val
+            else:
+                total += 2.0 * v_k * val
+        return total
+
+    def subgext_callback(function_key, generating_primal, n_indices, variable_indices,
+                          new_subgradient_values):
+        # Etend un sous-gradient deja connu (genere par X* = generating_primal,
+        # aplati en creux via _flatten_X_sparse) aux nouvelles coordonnees
+        # ajoutees par cb_append_variables, SANS rappeler l'oracle complet --
+        # meme formule que dans oracle() : g_r(theta) = <A_r,X*> - rhs_r, signe
+        # -g_r (minimisation de -h). variable_indices est exprime dans
+        # l'indexation COURANTE de active_names (mise a jour AVANT les appels C
+        # cb_append_variables/cb_reassign_variables, cf. plus bas dans la
+        # boucle de maj du pool).
+        if not generating_primal:
+            return 1
+        try:
+            flat = np.ctypeslib.as_array(generating_primal, shape=(primaldim,))
+            idx_arr = np.ctypeslib.as_array(variable_indices, shape=(n_indices,))
+            for k in range(n_indices):
+                r = int(idx_arr[k])
+                if r < 0 or r >= len(active_names):
+                    return 1
+                name = active_names[r]
+                val = (
+                    _dualized_inner_product_sparse(by_name[name], flat)
+                    - by_name[name]["rhs"]
+                )
+                new_subgradient_values[k] = -val
+            return 0
+        except Exception as e:
+            if print_level >= 0:
+                print(f"[cb_native dynamic] subgext_callback a leve une exception : {e}")
+            return 1
 
     best = {"h": -np.inf, "theta": None}
     state = {"n_calls": 0, "last_X": None}
@@ -1127,9 +1231,13 @@ def solve_native_conicbundle_dynamic(
         subg_values_p[0] = -h_val
         for r in range(m_now):
             subgradients_p[r] = -g[r]
+        if use_subgext and primal_p:
+            primal_arr = np.ctypeslib.as_array(primal_p, shape=(primaldim,))
+            primal_arr[:] = _flatten_X_sparse(res["X"])
         return 0
 
     oracle_cb = CB_FUNCTION_TYPE(oracle)
+    subgext_cb = CB_SUBGEXT_TYPE(subgext_callback) if use_subgext else None
 
     m_init = len(active_names)
     lowerb = np.array(
@@ -1154,7 +1262,7 @@ def solve_native_conicbundle_dynamic(
         assert rc == 0, f"cb_init_problem: rc={rc}"
 
         function_key = ctypes.c_void_p(1)
-        rc = lib.cb_add_function(p, function_key, oracle_cb, None, 0)
+        rc = lib.cb_add_function(p, function_key, oracle_cb, subgext_cb, primaldim)
         assert rc == 0, f"cb_add_function: rc={rc}"
 
         if effective_max_bundle_size is not None:

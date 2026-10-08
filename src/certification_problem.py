@@ -1,5 +1,7 @@
 import logging
+import random
 import re
+from collections import Counter
 import numpy as np
 import yaml
 import sys
@@ -38,6 +40,61 @@ from fastsdp_tools import get_project_path
 logger = logging.getLogger(__name__)
 
 device_ = torch.device("cuda" if patch_torch_cuda_is_available() else "cpu")
+
+
+def _build_name_to_layer(model_instance, names):
+    """Associe chaque nom de contrainte DUALIZABLE à sa couche (bloc num_matrix de
+    list_cstr) -- Phase A (task-dynamic-conic-bundle.md) garantit qu'une contrainte
+    DUALIZABLE ne référence jamais deux blocs à la fois en grouping standard, donc
+    num_matrix[0] est un identifiant de couche fiable. Utilisé par
+    factor_constraint_heuristic="random_layer"."""
+    wanted = set(names)
+    name_to_layer = {}
+    for c in model_instance.handler.Constraints.list_cstr:
+        if c["name"] in wanted:
+            name_to_layer[c["name"]] = int(np.asarray(c["num_matrix"]).reshape(-1)[0])
+    return name_to_layer
+
+
+def _select_factor_subset(dualizable_names, model_instance, n_keep, heuristic):
+    """Sélectionne les n_keep contraintes réellement dualisées parmi dualizable_names
+    (univers candidat complet), selon factor_constraint_heuristic (cf. yaml_config.py) :
+    'positional' (comportement historique, biaisé couche par couche), 'random_pure'
+    (tirage uniforme sans remise), ou 'random_layer' (tirage équilibré par couche, avec
+    le reste comblé aléatoirement). Ne fait rien si n_keep couvre déjà tout l'univers."""
+    n_total = len(dualizable_names)
+    if n_keep >= n_total:
+        return list(dualizable_names)
+
+    if heuristic == "positional":
+        return dualizable_names[:n_keep]
+
+    if heuristic == "random_pure":
+        return random.sample(dualizable_names, n_keep)
+
+    if heuristic == "random_layer":
+        name_to_layer = _build_name_to_layer(model_instance, dualizable_names)
+        by_layer = {}
+        for name in dualizable_names:
+            by_layer.setdefault(name_to_layer[name], []).append(name)
+        for names_in_layer in by_layer.values():
+            random.shuffle(names_in_layer)
+
+        per_layer = n_keep // len(by_layer)
+        selected = []
+        leftover_pool = []
+        for names_in_layer in by_layer.values():
+            take = min(per_layer, len(names_in_layer))
+            selected.extend(names_in_layer[:take])
+            leftover_pool.extend(names_in_layer[take:])
+
+        still_needed = n_keep - len(selected)
+        if still_needed > 0:
+            random.shuffle(leftover_pool)
+            selected.extend(leftover_pool[:still_needed])
+        return selected
+
+    raise ValueError(f"factor_constraint_heuristic inconnu : {heuristic}")
 
 
 class Certification_Problem:
@@ -490,10 +547,17 @@ class Certification_Problem:
                 model_instance.handler.setup_dualization(dualizable_names)
                 n_total = len(dualizable_names)
                 n_keep = max(1, round(cb_config.factor * n_total))
-                dualizable_names = dualizable_names[:n_keep]
-                print(f"[conic bundle] factor={cb_config.factor} x {n_total} contraintes "
-                      f"dualisables candidates => {n_keep} reellement dualisees "
-                      f"(les {n_total - n_keep} autres relachees mais jamais penalisees)")
+                heuristic = cb_config.factor_constraint_heuristic
+                dualizable_names = _select_factor_subset(
+                    dualizable_names, model_instance, n_keep, heuristic
+                )
+                layer_counts = Counter(
+                    _build_name_to_layer(model_instance, dualizable_names).values()
+                )
+                print(f"[conic bundle] factor={cb_config.factor} (heuristic={heuristic}) x "
+                      f"{n_total} contraintes dualisables candidates => {n_keep} reellement "
+                      f"dualisees (les {n_total - n_keep} autres relachees mais jamais penalisees) "
+                      f"-- repartition par couche (num_matrix) : {dict(sorted(layer_counts.items()))}")
             # handler_classic.initiate_env() enregistre inconditionnellement un
             # InfoCallback MOSEK très verbeux (non lié à use_callback) — le silencer
             # accélère fortement chaque résolution (aucun effet sur le résultat
@@ -530,6 +594,7 @@ class Certification_Problem:
                     positivity_threshold=cb_config.positivity_threshold,
                     active_bounds_fixing=cb_config.active_bounds_fixing,
                     sgnorm_term_tol=cb_config.sgnorm_term_tol,
+                    use_subgext=cb_config.use_subgext,
                 )
             else:
                 lb, _theta_best, n_iter, cb_status = solve_native_conicbundle_dual(

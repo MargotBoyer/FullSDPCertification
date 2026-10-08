@@ -52,6 +52,8 @@ models:
     engine: conicbundle_native
     dynamic: true
     factor: 1.0
+    max_pool_size: 150
+    use_subgext: true
     max_iter: 500
     term_relprec: 1.0e-07
     log_every: 5
@@ -62,5 +64,4 @@ models:
     add_batch_size: 50
     theta_drop_tol: 1.0e-03
     max_rounds: 100
-    active_bounds_fixing: false
   use_compact_add_rlt: true

@@ -1,0 +1,59 @@
+data :
+  name : "blob"
+  path : "data/datasets/blob_dataset.pth"
+  num_classes : 3
+  num_samples : 1000
+
+input_ball:
+  norm : "Linf"
+  epsilon : 1
+
+divide_run : 1
+
+network :
+  name : "blob_nn_4x10"
+  path : "data/models/blob_adv_blob_nn_4x10.pt"
+  K : 5
+  n :
+  - 2
+  - 10
+  - 10
+  - 10
+  - 10
+  - 3
+
+models :
+  - certification_model_type : "UntargetedSDP"
+    write_model: false
+    solver : "mosek_classic"
+    cuts :
+    - "RLT"
+    - "triangularization"
+    - "McCormick_beta_z"
+    - "beta_logits_comparaison"
+    - "beta_logits_comparaison_big_M"
+    - "sum_beta_logits_equal_logit"
+    RLT_props :
+    - 1.
+    all_combinations_cuts : false
+    CHORDAL_DECOMPOSITION: true
+    LAST_LAYER: false
+    INPUT_IN_VARIABLES : true
+    use_callback : false
+    use_active_neurons: true
+    use_inactive_neurons : false
+    keep_penultimate_actives : true
+    bounds_method: "IBP"
+    dynamic_conic_bundle:
+      enabled: true
+      dualize: ["RLT"]
+      engine: "conicbundle_native"
+      dynamic: false
+      max_iter: 200
+      term_relprec: 1.0e-7
+      eval_limit: 500
+      factor: 0.2
+      factor_constraint_heuristic: "positional"
+      print_png: true
+      log_every: 5
+      print_level: 0
